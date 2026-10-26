@@ -10,6 +10,7 @@ internal sealed class SamsungRemoteClient : IDisposable
 {
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private ClientWebSocket? _socket;
+    private IPAddress? _connectedTvAddress;
     private CancellationTokenSource? _receiveCancellation;
 
     public event Action<string>? StatusChanged;
@@ -67,6 +68,7 @@ internal sealed class SamsungRemoteClient : IDisposable
                 {
                     string? token = GetToken(root);
                     _socket = socket;
+                    _connectedTvAddress = address;
                     _receiveCancellation = new CancellationTokenSource();
                     _ = ReceiveLoopAsync(socket, _receiveCancellation.Token);
                     AppLog.Info("TV connection established.");
@@ -130,6 +132,72 @@ internal sealed class SamsungRemoteClient : IDisposable
         }
     }
 
+    public async Task LaunchAppAsync(string appId)
+    {
+        if (string.IsNullOrEmpty(appId) || !appId.All(char.IsAsciiDigit))
+        {
+            throw new ArgumentException("Provide a numeric Samsung Tizen application ID.", nameof(appId));
+        }
+
+        IPAddress? address = _connectedTvAddress;
+        if (!IsConnected || address is null)
+        {
+            throw new InvalidOperationException("Not connected. Turn on the TV and connect before launching an app.");
+        }
+
+        using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) })
+        {
+            try
+            {
+                using HttpResponseMessage response = await http.PostAsync(
+                    $"http://{address}:8001/api/v2/applications/{appId}", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    AppLog.Info($"Samsung REST accepted app launch request for {appId}.");
+                    return;
+                }
+
+                AppLog.Info($"Samsung REST returned {(int)response.StatusCode} for {appId}; trying WebSocket.");
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                AppLog.Info($"Samsung REST app launch unavailable: {ex.Message}. Trying WebSocket.");
+            }
+        }
+
+        await _sendGate.WaitAsync();
+        try
+        {
+            ClientWebSocket? socket = _socket;
+            if (socket?.State != WebSocketState.Open)
+            {
+                throw new InvalidOperationException("TV disconnected before the app could be launched.");
+            }
+
+            byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                method = "ms.channel.emit",
+                @params = new
+                {
+                    @event = "ed.apps.launch",
+                    to = "host",
+                    data = new { appId, action_type = "DEEP_LINK" }
+                }
+            });
+
+            await socket.SendAsync(
+                new ArraySegment<byte>(payload),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None);
+            AppLog.Info($"Samsung WebSocket app launch request sent for {appId}.");
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+    }
+
     public static async Task WakeAsync(string macAddress)
     {
         string normalized = new string(macAddress.Where(Uri.IsHexDigit).ToArray());
@@ -157,6 +225,7 @@ internal sealed class SamsungRemoteClient : IDisposable
     {
         ClientWebSocket? oldSocket = _socket;
         _socket = null;
+        _connectedTvAddress = null;
         _receiveCancellation?.Cancel();
         _receiveCancellation?.Dispose();
         _receiveCancellation = null;
@@ -212,6 +281,7 @@ internal sealed class SamsungRemoteClient : IDisposable
             if (ReferenceEquals(_socket, socket))
             {
                 _socket = null;
+                _connectedTvAddress = null;
                 StatusChanged?.Invoke("Disconnected — click Connect to reconnect");
             }
 
