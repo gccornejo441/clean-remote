@@ -37,13 +37,15 @@ The build script publishes a self-contained single-file Windows x64 executable. 
 
 The app keeps the pairing token for future connections. Select **Options > Reconnect** on subsequent launches. If port 8002 fails, you can test Legacy (8001) on a trusted network.
 
-If you want to wake your TV from standby, also provide its MAC address in the connection settings. Wake-on-LAN may not work over Wi-Fi or when the TV enters deep standby; it is not a guaranteed power-on method.
+If you want to wake your TV from standby, also provide its **active network interface's MAC address** in the connection settings: use the TV's wired MAC if the TV uses Ethernet, or wireless MAC if it uses Wi-Fi. If available, enable **Settings > General > Network > Expert Settings > Power On with Mobile**. Power-on via Wake-on-LAN may not work over Wi-Fi or when the TV enters deep standby; it is not a guaranteed power-on method. The TV may take time to start accepting WebSocket connections after waking.
+
+When the remote is connected, Power sends `KEY_POWER` instead of `KEY_POWEROFF`. Samsung Tizen models vary in their support for explicit power-off codes. `KEY_POWER` is a **toggle**, not a guaranteed off command; avoid repeated clicks when the TV takes time to respond. The app does not have reliable power-state feedback and intentionally reports only that a command or packet was sent.
 
 ## Controls
 
 | UI | Samsung command |
 | --- | --- |
-| Power (while connected) | `KEY_POWEROFF` |
+| Power (while connected) | `KEY_POWER` (Samsung power toggle) |
 | Power (while disconnected, with MAC configured) | Wake-on-LAN broadcast |
 | Input | `KEY_SOURCE` |
 | Apps / Home | `KEY_HOME` |
@@ -73,7 +75,8 @@ Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape o
 - **Connected but no response:** Try Home or Volume Up. Some Samsung key codes aren't accepted by all firmware versions.
 - **Netflix doesn't open:** Ensure Netflix is installed, the TV is on, and local app launching is supported by its firmware. The request may succeed without the TV opening the app.
 - **Unexpected disconnect:** Use **Options > Reconnect**.
-- **Wake fails:** Check MAC address, Power On with Mobile (if available), and try Ethernet.
+- **Power button doesn't turn off the TV:** With the TV on, verify the app is connected and Home or Volume works. The button now sends `KEY_POWER`, which is more widely supported than `KEY_POWEROFF`, but model support still varies.
+- **Wake fails:** Check that the configured MAC matches the TV's active Wi-Fi/Ethernet adapter, enable Power On with Mobile (if available), and try Ethernet. A Wake-on-LAN packet being sent does not mean the TV received or accepted it.
 
 ## Security and privacy
 
