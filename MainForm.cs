@@ -75,6 +75,13 @@ internal sealed class MainForm : Form
             case "apps":
                 await SendAsync("KEY_HOME");
                 return;
+            case "netflix":
+                await RunAsync(async () =>
+                {
+                    await _remote.LaunchAppAsync("3201907018807");
+                    SetStatus("Netflix launch requested · TV support varies");
+                });
+                return;
         }
 
         string? key = action switch
