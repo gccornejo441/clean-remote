@@ -8,14 +8,14 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 
 - Dark charcoal background, soft circular buttons, purple OK button, and red power button
 - TV name and connection indicator across the top
-- Power, Input, Apps, and Keyboard shortcut helper
+- Power, Input, Apps, Netflix, and Keyboard shortcut helper
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
-- Hold-to-adjust volume rocker and channel rocker, with mute and info controls
+- Dedicated VOL +/− rocker (click, press-and-hold, keyboard hold, and mouse wheel), channel rocker, mute and info controls
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
-**Apps** opens Samsung Home (`KEY_HOME`). The **Keyboard** button shows supported PC-to-TV remote shortcuts; typing arbitrary text into Samsung TV apps is **not** currently implemented. **Options** opens additional actions such as Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
+**Apps** opens Samsung Home (`KEY_HOME`). **Netflix** requests a launch of Samsung Tizen app `3201907018807` using the local REST application endpoint, with WebSocket fallback. The app must be installed on the TV, and some firmware ignores remote app launches. A request being accepted does not confirm Netflix opened. The **Keyboard** button shows supported PC-to-TV remote shortcuts; typing arbitrary text into Samsung TV apps is **not** currently implemented. **Options** opens additional actions such as Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
 
 ## Build a Windows executable
 
@@ -37,16 +37,19 @@ The build script publishes a self-contained single-file Windows x64 executable. 
 
 The app keeps the pairing token for future connections. Select **Options > Reconnect** on subsequent launches. If port 8002 fails, you can test Legacy (8001) on a trusted network.
 
-If you want to wake your TV from standby, also provide its MAC address in the connection settings. Wake-on-LAN may not work over Wi-Fi or when the TV enters deep standby; it is not a guaranteed power-on method.
+If you want to wake your TV from standby, also provide its **active network interface's MAC address** in the connection settings: use the TV's wired MAC if the TV uses Ethernet, or wireless MAC if it uses Wi-Fi. If available, enable **Settings > General > Network > Expert Settings > Power On with Mobile**. Power-on via Wake-on-LAN may not work over Wi-Fi or when the TV enters deep standby; it is not a guaranteed power-on method. The TV may take time to start accepting WebSocket connections after waking.
+
+When the remote is connected, Power sends `KEY_POWER` instead of `KEY_POWEROFF`. Samsung Tizen models vary in their support for explicit power-off codes. `KEY_POWER` is a **toggle**, not a guaranteed off command; avoid repeated clicks when the TV takes time to respond. The app does not have reliable power-state feedback and intentionally reports only that a command or packet was sent.
 
 ## Controls
 
 | UI | Samsung command |
 | --- | --- |
-| Power (while connected) | `KEY_POWEROFF` |
+| Power (while connected) | `KEY_POWER` (Samsung power toggle) |
 | Power (while disconnected, with MAC configured) | Wake-on-LAN broadcast |
 | Input | `KEY_SOURCE` |
 | Apps / Home | `KEY_HOME` |
+| Netflix | Launch app `3201907018807` over REST, with WebSocket `ed.apps.launch` fallback |
 | Up / Down / Left / Right | `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT` |
 | OK | `KEY_ENTER` |
 | Back | `KEY_RETURN` |
@@ -59,7 +62,7 @@ If you want to wake your TV from standby, also provide its MAC address in the co
 
 Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
 
-Click VOL + or − for one step, hold for continuous adjustment, or scroll over the rocker. The TV does not report its current volume to the app, so no absolute volume percentage is displayed.
+The volume control uses separate VOL + and VOL − buttons rather than a slider. Click once for one step, hold for continuous adjustment, and release to stop. Scroll the mouse wheel while hovering over the volume rocker to adjust volume. Holding the keyboard + or − keys also repeats volume changes. This sends discrete `KEY_VOLUP`/`KEY_VOLDOWN` commands without claiming to know the TV's current volume.
 
 ### Windows keyboard shortcuts
 
@@ -70,8 +73,10 @@ Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape o
 - **Can't connect:** Verify the TV IPv4 address, that it is on, and that both devices are on the same LAN. Confirm your TV authorized the app. Check router isolation and firewall settings.
 - **Pairing prompt doesn't appear:** Open **Options > Forget pairing**, then connect again and accept the TV prompt. Check TV device permission settings.
 - **Connected but no response:** Try Home or Volume Up. Some Samsung key codes aren't accepted by all firmware versions.
+- **Netflix doesn't open:** Ensure Netflix is installed, the TV is on, and local app launching is supported by its firmware. The request may succeed without the TV opening the app.
 - **Unexpected disconnect:** Use **Options > Reconnect**.
-- **Wake fails:** Check MAC address, Power On with Mobile (if available), and try Ethernet.
+- **Power button doesn't turn off the TV:** With the TV on, verify the app is connected and Home or Volume works. The button now sends `KEY_POWER`, which is more widely supported than `KEY_POWEROFF`, but model support still varies.
+- **Wake fails:** Check that the configured MAC matches the TV's active Wi-Fi/Ethernet adapter, enable Power On with Mobile (if available), and try Ethernet. A Wake-on-LAN packet being sent does not mean the TV received or accepted it.
 
 ## Security and privacy
 

@@ -16,6 +16,8 @@ internal sealed class MainForm : Form
     private string? _heldVolume;
     private bool _volumeSendInProgress;
     private bool _connecting;
+    private bool _powerRequestInProgress;
+    private DateTimeOffset _lastPowerRequest = DateTimeOffset.MinValue;
 
     public MainForm()
     {
@@ -119,13 +121,17 @@ internal sealed class MainForm : Form
                 ShowKeyboardHelp();
                 return;
             case "power":
-                if (_remote.IsConnected)
-                    await RunAsync(() => _remote.SendKeyAsync("KEY_POWEROFF"));
-                else
-                    await WakeAsync();
+                await HandlePowerAsync();
                 return;
             case "apps":
                 await SendAsync("KEY_HOME");
+                return;
+            case "netflix":
+                await RunAsync(async () =>
+                {
+                    await _remote.LaunchAppAsync("3201907018807");
+                    SetStatus("Netflix launch requested · TV support varies");
+                });
                 return;
         }
 
@@ -151,6 +157,36 @@ internal sealed class MainForm : Form
             _ => null
         };
         if (key != null) await SendAsync(key);
+    }
+
+    private async Task HandlePowerAsync()
+    {
+        if (_powerRequestInProgress || DateTimeOffset.UtcNow - _lastPowerRequest < TimeSpan.FromSeconds(2))
+            return;
+
+        _powerRequestInProgress = true;
+        try
+        {
+            if (_remote.IsConnected)
+            {
+                await RunAsync(async () =>
+                {
+                    await _remote.SendKeyAsync("KEY_POWER");
+                    AppLog.Info("Samsung power toggle command sent. TV response is not confirmed.");
+                    SetStatus("Power toggle sent · Check the TV");
+                });
+            }
+            else
+            {
+                await WakeAsync();
+            }
+
+            _lastPowerRequest = DateTimeOffset.UtcNow;
+        }
+        finally
+        {
+            _powerRequestInProgress = false;
+        }
     }
 
     private Task SendAsync(string key) => RunAsync(() => _remote.SendKeyAsync(key));
@@ -231,7 +267,8 @@ internal sealed class MainForm : Form
         await RunAsync(async () =>
         {
             await SamsungRemoteClient.WakeAsync(_settings.MacAddress);
-            SetStatus("Wake signal sent · TV power-on is not guaranteed");
+            AppLog.Info("Wake-on-LAN magic packet broadcast for configured TV.");
+            SetStatus("Wake packet sent · Power-on requires TV Wake-on-LAN support");
         });
     }
 
@@ -290,7 +327,7 @@ internal sealed class MainForm : Form
             "M             Mute\n" +
             "PgUp / PgDn   Channel up / down\n" +
             "Space         Play\n\n" +
-            "Hold the VOL + or − rocker for continuous volume adjustment, or scroll over the rocker with the mouse wheel.\n\n" +
+            "Click VOL + or − to change one step, or hold for continuous adjustment. Release to stop. Scroll over the rocker for mouse-wheel volume control.\n\n" +
             "Typing text into Samsung apps is not implemented. This is a keyboard shortcut guide, not a text-entry feature.",
             "Keyboard control", MessageBoxButtons.OK, MessageBoxIcon.Information);
         _surface.Focus();
@@ -301,9 +338,11 @@ internal sealed class MainForm : Form
         MessageBox.Show(this,
             "Clean TV Remote · Samsung TU690T\n\n" +
             "Tap Living Room TV to enter your TV IP and pair. Approve the request on your Samsung TV. " +
-            "Use the purple OK button and the surrounding navigation controls to operate it. " +
-            "Hold VOL + or − to adjust volume continuously, or scroll over the volume rocker.\n\n" +
-            "When connected, Power sends Power Off. When disconnected, Power sends a Wake-on-LAN packet only if a TV MAC address is configured. " +
+            "Use the purple OK button and the surrounding navigation controls to operate it.\n\n" +
+            "The volume control has separate + and − buttons. Click once for a step or hold to repeat; there is no slider.\n\n" +
+            "When connected, Power sends Samsung's power toggle key. This may turn the TV off or on, depending on its current state. " +
+            "When disconnected, Power broadcasts a Wake-on-LAN packet using the configured wired or wireless MAC address. " +
+            "Enable Power On with Mobile in the TV's Network Expert Settings if available. Wi-Fi wake support varies by model. " +
             "Apps opens Samsung Home; actual commands available vary by firmware.\n\n" +
             "Connection message:\n" + _settings.TvIp + "\n\n" +
             "The TV and PC must be on the same local network.",
