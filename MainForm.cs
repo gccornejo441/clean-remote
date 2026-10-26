@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 
 namespace CleanTVRemote;
 
@@ -26,15 +27,21 @@ internal sealed class MainForm : Form
         KeyPreview = true;
 
         _surface.Dock = DockStyle.Fill;
+        _surface.SetTvName(_settings.ActiveProfile.Name);
         _surface.SetConnection(string.IsNullOrWhiteSpace(_settings.TvIp)
-            ? "Tap Living Room TV to set up your TV"
-            : "Ready to connect · Tap Living Room TV", false);
+            ? $"Tap {_settings.ActiveProfile.Name} to set up your TV"
+            : $"Ready to connect · Tap {_settings.ActiveProfile.Name}", false);
         _surface.ActionRequested += async action => await HandleActionAsync(action);
         Controls.Add(_surface);
 
         _remote.StatusChanged += SetStatus;
         _remote.PairingTokenChanged += UpdateToken;
-        Shown += (_, _) => _surface.Focus();
+        Shown += async (_, _) =>
+        {
+            _surface.Focus();
+            if (!string.IsNullOrWhiteSpace(_settings.TvIp))
+                await RunAsync(ConnectAsync);
+        };
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
@@ -106,7 +113,7 @@ internal sealed class MainForm : Form
         if (result == DialogResult.Abort)
         {
             _remote.Disconnect();
-            SetStatus("Disconnected · Tap Living Room TV to connect");
+            SetStatus($"Disconnected · Tap {_settings.ActiveProfile.Name} to connect");
             return;
         }
 
@@ -118,6 +125,8 @@ internal sealed class MainForm : Form
 
         if (result != DialogResult.OK) return;
 
+        _settings.ActiveProfileId = dialog.SelectedProfile.Id;
+        _surface.SetTvName(dialog.SelectedProfile.Name);
         string ip = dialog.TvIp;
         bool secure = dialog.Secure;
         if (!string.Equals(_settings.TvIp, ip, StringComparison.OrdinalIgnoreCase) || _settings.Secure != secure)
@@ -131,6 +140,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            AppLog.Error("Could not save TV settings.", ex);
             SetStatus($"Could not save TV settings: {ex.Message}");
             return;
         }
@@ -150,7 +160,7 @@ internal sealed class MainForm : Form
         {
             string? newToken = await _remote.ConnectAsync(_settings.TvIp, _settings.Secure, _settings.Token);
             if (!string.IsNullOrWhiteSpace(newToken)) UpdateToken(newToken);
-            SetStatus("Connected · Samsung TU690T");
+            SetStatus($"Connected · {_settings.ActiveProfile.Name}");
         }
         finally
         {
@@ -186,6 +196,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            AppLog.Error("Could not clear the TV pairing token.", ex);
             SetStatus($"Could not clear pairing: {ex.Message}");
         }
     }
@@ -202,16 +213,16 @@ internal sealed class MainForm : Form
         menu.Items.Add("Connection settings", null, async (_, _) => await ShowSettingsAsync());
         menu.Items.Add("Reconnect", null, async (_, _) => await RunAsync(ConnectAsync));
         menu.Items.Add("Wake TV", null, async (_, _) => await WakeAsync());
+        menu.Items.Add("Open diagnostic log", null, (_, _) => OpenDiagnosticLog());
         menu.Items.Add("Samsung Menu", null, async (_, _) => await SendAsync("KEY_MENU"));
         menu.Items.Add("Pause playback", null, async (_, _) => await SendAsync("KEY_PAUSE"));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Disconnect", null, (_, _) =>
         {
             _remote.Disconnect();
-            SetStatus("Disconnected · Tap Living Room TV to reconnect");
+            SetStatus($"Disconnected · Tap {_settings.ActiveProfile.Name} to reconnect");
         });
         menu.Items.Add("Forget pairing", null, (_, _) => ClearPairing());
-        menu.Closed += (_, _) => menu.Dispose();
         menu.Show(_surface, new Point(Math.Max(10, _surface.Width / 2 - 80), Math.Max(30, _surface.Height / 2)));
     }
 
@@ -227,6 +238,7 @@ internal sealed class MainForm : Form
             "M             Mute\n" +
             "PgUp / PgDn   Channel up / down\n" +
             "Space         Play\n\n" +
+            "Drag the volume slider up or down to send volume steps. The TV does not report its current level, so the slider adjusts volume relatively.\n\n" +
             "Typing text into Samsung apps is not implemented. This is a keyboard shortcut guide, not a text-entry feature.",
             "Keyboard control", MessageBoxButtons.OK, MessageBoxIcon.Information);
         _surface.Focus();
@@ -261,6 +273,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            AppLog.Error("TV paired, but the token could not be saved.", ex);
             SetStatus($"Paired, but could not save token: {ex.Message}");
         }
     }
@@ -284,7 +297,23 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
+            AppLog.Error("An operation failed.", ex);
             SetStatus($"Error: {ex.Message}");
+        }
+    }
+
+    private void OpenDiagnosticLog()
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
+            startInfo.ArgumentList.Add(AppLog.LogFilePath);
+            Process.Start(startInfo);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Could not open the diagnostic log.", ex);
+            SetStatus($"Could not open log: {ex.Message}");
         }
     }
 }

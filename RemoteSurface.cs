@@ -33,8 +33,7 @@ internal sealed class RemoteSurface : Control
         ("back", new RectangleF(14, 410, 90, 39)),
         ("home", new RectangleF(113, 410, 94, 39)),
         ("options", new RectangleF(216, 410, 90, 39)),
-        ("vol_up", new RectangleF(17, 469, 60, 50)),
-        ("vol_down", new RectangleF(17, 552, 60, 53)),
+        ("volume", new RectangleF(17, 469, 60, 136)),
         ("mute", new RectangleF(136, 471, 48, 48)),
         ("info", new RectangleF(136, 542, 48, 48)),
         ("ch_up", new RectangleF(243, 469, 60, 50)),
@@ -47,7 +46,16 @@ internal sealed class RemoteSurface : Control
     private string? _hover;
     private string? _pressed;
     private string _status = "Tap Living Room TV to connect";
+    private string _tvName = "Living Room TV";
     private bool _connected;
+    private bool _draggingVolume;
+    private float _volumeThumbY = 537f;
+    private float _volumeLastY;
+    private float _volumeStepRemainder;
+
+    private const float VolumeTrackTop = 497f;
+    private const float VolumeTrackBottom = 578f;
+    private const float VolumeStepsPerControlUnit = 12f;
 
     public event Action<string>? ActionRequested;
 
@@ -64,6 +72,12 @@ internal sealed class RemoteSurface : Control
     {
         _status = message;
         _connected = connected;
+        Invalidate();
+    }
+
+    public void SetTvName(string name)
+    {
+        _tvName = name;
         Invalidate();
     }
 
@@ -85,6 +99,18 @@ internal sealed class RemoteSurface : Control
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        if (_draggingVolume)
+        {
+            float y = Math.Clamp(ToDesignPoint(e.Location).Y, VolumeTrackTop, VolumeTrackBottom);
+            ApplyVolumeMovement(_volumeLastY - y);
+            _volumeLastY = y;
+            _volumeThumbY = y;
+            _hover = "volume";
+            Cursor = Cursors.SizeNS;
+            Invalidate();
+            return;
+        }
+
         string? next = HitTest(e.Location);
         if (_hover != next)
         {
@@ -97,6 +123,7 @@ internal sealed class RemoteSurface : Control
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
+        if (_draggingVolume) return;
         _hover = null;
         _pressed = null;
         Cursor = Cursors.Default;
@@ -109,12 +136,35 @@ internal sealed class RemoteSurface : Control
         if (e.Button != MouseButtons.Left) return;
         Focus();
         _pressed = HitTest(e.Location);
+        if (_pressed == "volume")
+        {
+            float y = Math.Clamp(ToDesignPoint(e.Location).Y, VolumeTrackTop, VolumeTrackBottom);
+            _volumeStepRemainder = 0;
+            _volumeLastY = y;
+            _volumeThumbY = y;
+            _draggingVolume = true;
+            Capture = true;
+            ApplyVolumeMovement(537f - y);
+            Cursor = Cursors.SizeNS;
+        }
         Invalidate();
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
+        if (e.Button == MouseButtons.Left && _draggingVolume)
+        {
+            _draggingVolume = false;
+            _pressed = null;
+            _volumeThumbY = 537f;
+            _volumeStepRemainder = 0;
+            Capture = false;
+            Cursor = Cursors.Default;
+            Invalidate();
+            return;
+        }
+
         string? hit = HitTest(e.Location);
         string? press = _pressed;
         _pressed = null;
@@ -162,15 +212,37 @@ internal sealed class RemoteSurface : Control
 
     private float GetScale() => Math.Min(ClientSize.Width / DesignWidth, ClientSize.Height / DesignHeight);
 
-    private string? HitTest(Point point)
+    private PointF ToDesignPoint(Point point)
     {
         float scale = GetScale();
-        if (scale <= 0) return null;
-        float x = (point.X - (ClientSize.Width - DesignWidth * scale) / 2) / scale;
-        float y = (point.Y - (ClientSize.Height - DesignHeight * scale) / 2) / scale;
+        if (scale <= 0) return PointF.Empty;
+        return new PointF(
+            (point.X - (ClientSize.Width - DesignWidth * scale) / 2) / scale,
+            (point.Y - (ClientSize.Height - DesignHeight * scale) / 2) / scale);
+    }
+
+    private void ApplyVolumeMovement(float upwardMovement)
+    {
+        _volumeStepRemainder += upwardMovement;
+        while (_volumeStepRemainder >= VolumeStepsPerControlUnit)
+        {
+            ActionRequested?.Invoke("vol_up");
+            _volumeStepRemainder -= VolumeStepsPerControlUnit;
+        }
+        while (_volumeStepRemainder <= -VolumeStepsPerControlUnit)
+        {
+            ActionRequested?.Invoke("vol_down");
+            _volumeStepRemainder += VolumeStepsPerControlUnit;
+        }
+    }
+
+    private string? HitTest(Point point)
+    {
+        PointF designPoint = ToDesignPoint(point);
+        if (GetScale() <= 0) return null;
         foreach (var target in _targets)
         {
-            if (target.Area.Contains(x, y)) return target.Id;
+            if (target.Area.Contains(designPoint)) return target.Id;
         }
         return null;
     }
@@ -191,7 +263,7 @@ internal sealed class RemoteSurface : Control
     {
         FillRounded(g, new RectangleF(12, 16, 245, 42), 23, ActiveColor("device", Surface));
         FillCircle(g, 32, 37, 4.5f, _connected ? Green : Color.FromArgb(240, 171, 69));
-        DrawText(g, "Living Room TV", new RectangleF(44, 23, 142, 28), 13, true, TextPrimary);
+        DrawText(g, _tvName, new RectangleF(44, 23, 142, 28), 13, true, TextPrimary);
         FillRounded(g, new RectangleF(193, 29, 50, 17), 9, Purple);
         DrawText(g, "Samsung", new RectangleF(196, 30, 45, 14), 8.1f, true, Color.White, StringAlignment.Center);
         Chevron(g, 252, 37, "down", TextSecondary, 3.1f);
@@ -216,15 +288,18 @@ internal sealed class RemoteSurface : Control
         Pill(g, 113, 410, 94, "home", "home", "Home");
         Pill(g, 216, 410, 90, "options", "more", "Options");
 
-        FillRounded(g, new RectangleF(17, 469, 60, 136), 30, Surface);
+        FillRounded(g, new RectangleF(17, 469, 60, 136), 30, ActiveColor("volume", Surface));
         FillRounded(g, new RectangleF(243, 469, 60, 136), 30, Surface);
-        if (_hover == "vol_up" || _pressed == "vol_up") FillRounded(g, new RectangleF(19, 471, 56, 48), 24, ActiveColor("vol_up", Surface));
-        if (_hover == "vol_down" || _pressed == "vol_down") FillRounded(g, new RectangleF(19, 555, 56, 48), 24, ActiveColor("vol_down", Surface));
         if (_hover == "ch_up" || _pressed == "ch_up") FillRounded(g, new RectangleF(245, 471, 56, 48), 24, ActiveColor("ch_up", Surface));
         if (_hover == "ch_down" || _pressed == "ch_down") FillRounded(g, new RectangleF(245, 555, 56, 48), 24, ActiveColor("ch_down", Surface));
-        Icon(g, "plus", 47, 495, TextPrimary);
-        DrawText(g, "VOL", new RectangleF(24, 526, 46, 25), 10, true, TextSecondary, StringAlignment.Center);
-        Icon(g, "minus", 47, 580, TextPrimary);
+        Icon(g, "plus", 57, 484, TextPrimary);
+        using (var trackPen = new Pen(Color.FromArgb(88, 84, 104), 3) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            g.DrawLine(trackPen, 57, VolumeTrackTop, 57, VolumeTrackBottom);
+        FillCircle(g, 57, _volumeThumbY, 7.5f, _draggingVolume ? Purple : Lifted);
+        using (var thumbOutline = new Pen(Color.FromArgb(197, 177, 255), 1.3f))
+            g.DrawEllipse(thumbOutline, 50, _volumeThumbY - 7, 14, 14);
+        DrawText(g, "VOL", new RectangleF(19, 523, 29, 24), 9.2f, true, TextSecondary, StringAlignment.Center);
+        Icon(g, "minus", 57, 591, TextPrimary);
         Chevron(g, 273, 495, "up", TextPrimary, 7);
         DrawText(g, "CH", new RectangleF(248, 526, 50, 25), 10, true, TextSecondary, StringAlignment.Center);
         Chevron(g, 273, 579, "down", TextPrimary, 7);

@@ -11,7 +11,7 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 - Power, Input, Apps, and Keyboard shortcut helper
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
-- Volume and channel rockers with mute and info controls
+- A drag-to-adjust volume slider and channel rocker, with mute and info controls
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
@@ -59,6 +59,8 @@ If you want to wake your TV from standby, also provide its MAC address in the co
 
 Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
 
+The volume slider sends `KEY_VOLUP` or `KEY_VOLDOWN` steps as you drag it. The TV does not report its current volume to the app, so the slider adjusts relatively and does not display the TV's actual level.
+
 ### Windows keyboard shortcuts
 
 Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape or Backspace for Back; Home for Samsung Home; plus/minus for volume; M for mute; Page Up/Down for channels; Space for Play. Click **Keyboard** for the in-app shortcut guide.
@@ -75,6 +77,8 @@ Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape o
 
 The app sends commands only to the entered local TV IP. Wake-on-LAN sends a local network broadcast. TV settings and the authentication token are stored in `%APPDATA%\CleanTVRemote\settings.json`. Anyone who obtains the token and can access the TV's network may be able to control it. The secure port 8002 connection uses the TV's self-signed certificate without validating its identity; use only on a trusted home network. Port 8001 is unencrypted.
 
+Diagnostic logs are stored in `%APPDATA%\CleanTVRemote\app.log`. They include connection attempts and error details, but do not record the saved pairing token. Use **Options > Open diagnostic log** to view the file before sharing it.
+
 ## Project structure
 
 - `MainForm.cs`: action routing, status handling, pairing and extra actions
@@ -82,6 +86,7 @@ The app sends commands only to the entered local TV IP. Wake-on-LAN sends a loca
 - `ConnectionDialog.cs`: TV connection and pairing settings dialog
 - `SamsungRemoteClient.cs`: existing Samsung WebSocket commands and Wake-on-LAN implementation
 - `AppSettings.cs`: existing local settings persistence
+- `AppLog.cs`: local diagnostic logging with pairing-token redaction
 - `build-windows.bat`: Windows x64 build
 
 ## Validation status

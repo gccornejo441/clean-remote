@@ -39,6 +39,7 @@ internal sealed class SamsungRemoteClient : IDisposable
         string protocol = secure ? "wss" : "ws";
         int port = secure ? 8002 : 8001;
         string url = $"{protocol}://{address}:{port}/api/v2/channels/samsung.remote.control?name={Uri.EscapeDataString(name)}";
+        AppLog.Info($"Starting {(secure ? "secure" : "legacy")} TV connection to {address}:{port}.");
 
         if (!string.IsNullOrWhiteSpace(savedToken))
         {
@@ -68,6 +69,7 @@ internal sealed class SamsungRemoteClient : IDisposable
                     _socket = socket;
                     _receiveCancellation = new CancellationTokenSource();
                     _ = ReceiveLoopAsync(socket, _receiveCancellation.Token);
+                    AppLog.Info("TV connection established.");
                     StatusChanged?.Invoke("Connected to TV");
                     return token;
                 }
@@ -194,11 +196,13 @@ internal sealed class SamsungRemoteClient : IDisposable
         catch (ObjectDisposedException)
         {
         }
-        catch (WebSocketException)
+        catch (WebSocketException ex)
         {
+            AppLog.Error("TV WebSocket receive loop failed.", ex);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            AppLog.Info($"TV connection closed: {ex.Message}");
         }
         catch (JsonException)
         {

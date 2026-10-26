@@ -1,4 +1,7 @@
 [Bb]in/
 [Oo]bj/
 [pP]ublish/
+[pP]ublish-logged/
+[pP]ublish-autoconnect/
+[pP]ublish-volume/
 .vs/
