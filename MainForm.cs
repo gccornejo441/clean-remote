@@ -12,6 +12,9 @@ internal sealed class MainForm : Form
     private readonly SamsungRemoteClient _remote = new();
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly RemoteSurface _surface = new();
+    private readonly System.Windows.Forms.Timer _volumeRepeatTimer = new() { Interval = 360 };
+    private string? _heldVolume;
+    private bool _volumeSendInProgress;
     private bool _connecting;
 
     public MainForm()
@@ -32,6 +35,13 @@ internal sealed class MainForm : Form
             ? $"Tap {_settings.ActiveProfile.Name} to set up your TV"
             : $"Ready to connect · Tap {_settings.ActiveProfile.Name}", false);
         _surface.ActionRequested += async action => await HandleActionAsync(action);
+        _surface.VolumeHoldStarted += StartVolumeHold;
+        _surface.VolumeHoldEnded += StopVolumeHold;
+        _volumeRepeatTimer.Tick += (_, _) =>
+        {
+            _volumeRepeatTimer.Interval = 240;
+            if (_heldVolume != null) _ = SendHeldVolumeStepAsync(_heldVolume);
+        };
         Controls.Add(_surface);
 
         _remote.StatusChanged += SetStatus;
@@ -46,8 +56,50 @@ internal sealed class MainForm : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        StopVolumeHold();
+        _volumeRepeatTimer.Dispose();
         _remote.Dispose();
         base.OnFormClosed(e);
+    }
+
+    private void StartVolumeHold(string action)
+    {
+        StopVolumeHold();
+        if (!_remote.IsConnected)
+        {
+            SetStatus($"Not connected · Tap {_settings.ActiveProfile.Name} to connect");
+            return;
+        }
+        _heldVolume = action;
+        _volumeRepeatTimer.Interval = 360;
+        _volumeRepeatTimer.Start();
+        _ = SendHeldVolumeStepAsync(action);
+    }
+
+    private void StopVolumeHold()
+    {
+        _heldVolume = null;
+        _volumeRepeatTimer.Stop();
+    }
+
+    private async Task SendHeldVolumeStepAsync(string action)
+    {
+        if (_volumeSendInProgress || !_remote.IsConnected) return;
+        _volumeSendInProgress = true;
+        try
+        {
+            await _remote.SendKeyAsync(action == "vol_up" ? "KEY_VOLUP" : "KEY_VOLDOWN");
+        }
+        catch (Exception ex)
+        {
+            StopVolumeHold();
+            AppLog.Error("Volume control failed.", ex);
+            SetStatus($"Volume control error: {ex.Message}");
+        }
+        finally
+        {
+            _volumeSendInProgress = false;
+        }
     }
 
     private async Task HandleActionAsync(string action)
@@ -238,7 +290,7 @@ internal sealed class MainForm : Form
             "M             Mute\n" +
             "PgUp / PgDn   Channel up / down\n" +
             "Space         Play\n\n" +
-            "Drag the volume slider up or down to send volume steps. The TV does not report its current level, so the slider adjusts volume relatively.\n\n" +
+            "Hold the VOL + or − rocker for continuous volume adjustment, or scroll over the rocker with the mouse wheel.\n\n" +
             "Typing text into Samsung apps is not implemented. This is a keyboard shortcut guide, not a text-entry feature.",
             "Keyboard control", MessageBoxButtons.OK, MessageBoxIcon.Information);
         _surface.Focus();
@@ -249,7 +301,8 @@ internal sealed class MainForm : Form
         MessageBox.Show(this,
             "Clean TV Remote · Samsung TU690T\n\n" +
             "Tap Living Room TV to enter your TV IP and pair. Approve the request on your Samsung TV. " +
-            "Use the purple OK button and the surrounding navigation controls to operate it.\n\n" +
+            "Use the purple OK button and the surrounding navigation controls to operate it. " +
+            "Hold VOL + or − to adjust volume continuously, or scroll over the volume rocker.\n\n" +
             "When connected, Power sends Power Off. When disconnected, Power sends a Wake-on-LAN packet only if a TV MAC address is configured. " +
             "Apps opens Samsung Home; actual commands available vary by firmware.\n\n" +
             "Connection message:\n" + _settings.TvIp + "\n\n" +
