@@ -11,7 +11,7 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 - Power, Input, Apps, Netflix, and Keyboard shortcut helper
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
-- A drag-to-adjust volume slider and channel rocker, with mute and info controls
+- Dedicated VOL +/− rocker (click, press-and-hold, keyboard hold, and mouse wheel), channel rocker, mute and info controls
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
@@ -62,7 +62,7 @@ When the remote is connected, Power sends `KEY_POWER` instead of `KEY_POWEROFF`.
 
 Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
 
-The volume slider sends `KEY_VOLUP` or `KEY_VOLDOWN` steps as you drag it. The TV does not report its current volume to the app, so the slider adjusts relatively and does not display the TV's actual level.
+The volume control uses separate VOL + and VOL − buttons rather than a slider. Click once for one step, hold for continuous adjustment, and release to stop. Scroll the mouse wheel while hovering over the volume rocker to adjust volume. Holding the keyboard + or − keys also repeats volume changes. This sends discrete `KEY_VOLUP`/`KEY_VOLDOWN` commands without claiming to know the TV's current volume.
 
 ### Windows keyboard shortcuts
 
