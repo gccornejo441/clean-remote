@@ -1,64 +1,91 @@
 # Clean TV Remote
 
-A small, Windows-only Samsung Tizen TV remote. Built with C# and Windows Forms on .NET 10. No Microsoft Store app, Samsung account, external service, or third-party package is required. Network control stays on your home LAN.
+A compact Windows remote for Samsung Tizen TVs, including the Samsung TU690T (`UN58TU690TFXZA`). Built with C# and Windows Forms on .NET 10. It runs on your home network without a Samsung account, cloud backend, telemetry, or third-party UI packages.
 
-## Compatibility
+## Redesigned remote
 
-Designed for Samsung TU690T (`UN58TU690TFXZA`) and related TVs exposing Samsung's local WebSocket remote endpoint. It has **not yet been tested against the physical TV**. Actual availability of commands depends on TV settings and firmware.
+The main window uses a dark, narrow layout inspired by the provided remote screenshot:
+
+- Dark charcoal background, soft circular buttons, purple OK button, and red power button
+- TV name and connection indicator across the top
+- Power, Input, Apps, and Keyboard shortcut helper
+- Large circular four-way navigation pad with OK in the center
+- Back, Home, and Options shortcuts
+- Volume and channel rockers with mute and info controls
+- Rewind, Play, and Fast-forward controls
+- Hover and press feedback, responsive layout, and Windows keyboard navigation
+
+**Apps** opens Samsung Home (`KEY_HOME`). The **Keyboard** button shows supported PC-to-TV remote shortcuts; typing arbitrary text into Samsung TV apps is **not** currently implemented. **Options** opens additional actions such as Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
 
 ## Build a Windows executable
 
 1. Install the [.NET 10 SDK for Windows](https://dotnet.microsoft.com/download/dotnet/10.0) if you do not already have it.
-2. Extract the ZIP to a folder on Windows.
+2. Extract this project or clone the GitHub repository.
 3. Double-click `build-windows.bat`.
-4. Open `publish\CleanTVRemote.exe`.
+4. Run `publish\CleanTVRemote.exe`.
 
-The script builds a self-contained single-file Windows x64 application. The resulting EXE is larger than the source files because it includes the .NET runtime. You can copy that EXE to another compatible Windows x64 machine without installing .NET there. The EXE is not code-signed, so Windows may display an unknown-publisher warning; verify the source before running it.
-
-You can also open `CleanTVRemote.csproj` in Visual Studio with the .NET desktop development workload.
+The build script publishes a self-contained single-file Windows x64 executable. The resulting EXE can be copied to a compatible Windows x64 computer without installing the runtime. The executable is not code-signed and may show an unknown-publisher warning. The app can also be built from `CleanTVRemote.csproj` in Visual Studio.
 
 ## Connect to the Samsung TV
 
-1. Turn the TV on and put your PC and TV on the same home LAN.
-2. If your TV exposes these settings, turn on **IP Remote** in **Settings > General > Network > Expert Settings**. Enable **Power On with Mobile** for waking the TV (setting availability varies by firmware).
-3. Find the TV's IP address in its network settings or your router's device list.
-4. Enter the TV IPv4 address in the app and select **Secure (8002)**.
-5. Click **CONNECT** and select **Allow** on the TV's authorization popup.
-6. Once connected, use the on-screen buttons. Pairing is saved for subsequent sessions.
+1. Turn on your TV and connect it and the PC to the same home network.
+2. If available, enable **IP Remote** in the TV's network expert settings.
+3. Find the TV's IPv4 address in its network settings or your router's connected-device list.
+4. In the app, click **Living Room TV** at the top.
+5. Enter the address and select **Secure (port 8002)**.
+6. Select **Save & connect**, then approve the connection prompt on the television.
 
-If secure port 8002 does not work, test **Legacy (8001)**. Port 8001 sends remote control commands without encryption. Do not use either mode on an untrusted network.
+The app keeps the pairing token for future connections. Select **Options > Reconnect** on subsequent launches. If port 8002 fails, you can test Legacy (8001) on a trusted network.
 
-## Buttons
+If you want to wake your TV from standby, also provide its MAC address in the connection settings. Wake-on-LAN may not work over Wi-Fi or when the TV enters deep standby; it is not a guaranteed power-on method.
 
-- Navigation: Up, Down, Left, Right, OK, Back, Home
-- Sound: Volume +, Volume -, Mute
-- TV: Source, Channel +, Channel -, Power Off
-- Wake TV: sends a Wake-on-LAN packet using the optional TV MAC address
+## Controls
 
-The **PLAY** button sends `KEY_PLAY`; availability varies by playback app. The Source command may be ignored on some Samsung firmware. Wake-on-LAN is more reliable on Ethernet and may not wake a TV connected via Wi-Fi or one in deep standby. It is not a guarantee the TV turns on.
+| UI | Samsung command |
+| --- | --- |
+| Power (while connected) | `KEY_POWEROFF` |
+| Power (while disconnected, with MAC configured) | Wake-on-LAN broadcast |
+| Input | `KEY_SOURCE` |
+| Apps / Home | `KEY_HOME` |
+| Up / Down / Left / Right | `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT` |
+| OK | `KEY_ENTER` |
+| Back | `KEY_RETURN` |
+| Volume +/- and Mute | `KEY_VOLUP`, `KEY_VOLDOWN`, `KEY_MUTE` |
+| Channel up/down | `KEY_CHUP`, `KEY_CHDOWN` |
+| Info | `KEY_INFO` |
+| Rewind / Play / Fast-forward | `KEY_REWIND`, `KEY_PLAY`, `KEY_FF` |
+| Options > Pause playback | `KEY_PAUSE` |
+| Options > Samsung Menu | `KEY_MENU` |
+
+Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
+
+### Windows keyboard shortcuts
+
+Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape or Backspace for Back; Home for Samsung Home; plus/minus for volume; M for mute; Page Up/Down for channels; Space for Play. Click **Keyboard** for the in-app shortcut guide.
 
 ## Troubleshooting
 
-- **Timeout:** Confirm the TV is powered on, the IP address is correct, and both devices are on the same LAN. Check router client isolation and firewall settings.
-- **No pairing popup:** On the TV, review external device/IP remote permissions. Use **Forget pairing** in the app and reconnect.
-- **Connected, but no response:** Test Volume Up or Home first. Some key codes are silently ignored on different firmware.
-- **TV IP changes:** Reserve an IP address for the TV in your router's DHCP settings.
-- **Wake doesn't work:** Enable Power On with Mobile on the TV, use the correct MAC address, and try wired Ethernet.
+- **Can't connect:** Verify the TV IPv4 address, that it is on, and that both devices are on the same LAN. Confirm your TV authorized the app. Check router isolation and firewall settings.
+- **Pairing prompt doesn't appear:** Open **Options > Forget pairing**, then connect again and accept the TV prompt. Check TV device permission settings.
+- **Connected but no response:** Try Home or Volume Up. Some Samsung key codes aren't accepted by all firmware versions.
+- **Unexpected disconnect:** Use **Options > Reconnect**.
+- **Wake fails:** Check MAC address, Power On with Mobile (if available), and try Ethernet.
 
-## Privacy and security
+## Security and privacy
 
-- The app talks only to the configured local TV address and sends optional Wake-on-LAN broadcasts.
-- It has no telemetry, cloud login, or background service.
-- The local pairing token and the TV's IP/MAC are stored in `%APPDATA%\CleanTVRemote\settings.json`. Protect your Windows account and home network; anyone with the token and LAN access may be able to control the TV.
-- Many Samsung TVs use a self-signed TLS certificate on port 8002. The app therefore accepts that certificate for the **configured TV endpoint only**. This permits an on-path device on your LAN to impersonate the TV; use a trusted home network.
-- This application is independent of Samsung and Syntrix.
+The app sends commands only to the entered local TV IP. Wake-on-LAN sends a local network broadcast. TV settings and the authentication token are stored in `%APPDATA%\CleanTVRemote\settings.json`. Anyone who obtains the token and can access the TV's network may be able to control it. The secure port 8002 connection uses the TV's self-signed certificate without validating its identity; use only on a trusted home network. Port 8001 is unencrypted.
 
-## Limitations
+## Project structure
 
-There is no auto-discovery, installer, keyboard remote, app launcher, or automatic reconnect in this first version. Physical-TV interoperability and Windows build output have not yet been verified in this environment.
+- `MainForm.cs`: action routing, status handling, pairing and extra actions
+- `RemoteSurface.cs`: scalable dark remote UI, painting, hit targets and keyboard support
+- `ConnectionDialog.cs`: TV connection and pairing settings dialog
+- `SamsungRemoteClient.cs`: existing Samsung WebSocket commands and Wake-on-LAN implementation
+- `AppSettings.cs`: existing local settings persistence
+- `build-windows.bat`: Windows x64 build
 
-## Protocol references
+## Validation status
 
-- https://image-us.samsung.com/SamsungUS/samsungbusiness/tv-ci-resources/Samsung-IP-Control.pdf
-- https://github.com/pkapteijn/samsungtv-rc
-- https://github.com/PepperDash/epi-samsung-tizenWebsocket
+The files have been reviewed structurally, but a native Windows build and connection to the physical Samsung TV have **not** been verified in this environment. Build and exercise the controls on Windows before treating this as a confirmed working release.
+
+This is a community application independent of Samsung and Syntrix.
