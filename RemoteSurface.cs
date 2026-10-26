@@ -21,10 +21,11 @@ internal sealed class RemoteSurface : Control
     [
         ("device", new RectangleF(12, 16, 245, 42)),
         ("help", new RectangleF(272, 17, 37, 40)),
-        ("power", new RectangleF(19, 105, 56, 69)),
-        ("input", new RectangleF(93, 105, 56, 69)),
-        ("apps", new RectangleF(172, 105, 56, 69)),
-        ("keyboard", new RectangleF(246, 105, 56, 69)),
+        ("power", new RectangleF(4, 105, 60, 69)),
+        ("input", new RectangleF(67, 105, 60, 69)),
+        ("apps", new RectangleF(130, 105, 60, 69)),
+        ("netflix", new RectangleF(193, 105, 60, 69)),
+        ("keyboard", new RectangleF(256, 105, 60, 69)),
         ("up", new RectangleF(125, 187, 70, 59)),
         ("left", new RectangleF(57, 252, 65, 75)),
         ("ok", new RectangleF(122, 250, 76, 79)),
@@ -271,10 +272,11 @@ internal sealed class RemoteSurface : Control
         DrawText(g, "?", new RectangleF(274, 24, 32, 24), 16, true, TextPrimary, StringAlignment.Center);
         DrawText(g, _status, new RectangleF(15, 70, 291, 30), 10.4f, false, TextSecondary, StringAlignment.Near, true);
 
-        TopAction(g, 47, "power", "Power", "power", Red);
-        TopAction(g, 121, "input", "Input", "screen", Surface);
-        TopAction(g, 199, "apps", "Apps", "apps", Surface);
-        TopAction(g, 273, "keyboard", "Keyboard", "keyboard", Surface);
+        TopAction(g, 34, "power", "Power", "power", Red);
+        TopAction(g, 97, "input", "Input", "screen", Surface);
+        TopAction(g, 160, "apps", "Apps", "apps", Surface);
+        TopAction(g, 223, "netflix", "Netflix", "netflix", Surface);
+        TopAction(g, 286, "keyboard", "Keyboard", "keyboard", Surface);
 
         FillCircle(g, 160, 290, 103, Surface);
         PadArrow(g, "up", 160, 208, "up");
@@ -321,7 +323,8 @@ internal sealed class RemoteSurface : Control
     private void TopAction(Graphics g, float x, string id, string label, string icon, Color fill)
     {
         FillCircle(g, x, 128, 23, ActiveColor(id, fill));
-        Icon(g, icon, x, 128, id == "power" ? Color.White : TextSecondary);
+        Color iconColor = id == "power" ? Color.White : id == "netflix" ? Color.FromArgb(229, 9, 20) : TextSecondary;
+        Icon(g, icon, x, 128, iconColor);
         DrawText(g, label, new RectangleF(x - 33, 154, 66, 24), 9.9f, false, TextSecondary, StringAlignment.Center);
     }
 
@@ -397,6 +400,9 @@ internal sealed class RemoteSurface : Control
         using var brush = new SolidBrush(color);
         switch (icon)
         {
+            case "netflix":
+                DrawText(g, "N", new RectangleF(x - 14, y - 18, 28, 36), 25, true, color, StringAlignment.Center);
+                break;
             case "power":
                 g.DrawArc(pen, x - 8, y - 7, 16, 16, 310, 280);
                 g.DrawLine(pen, x, y - 11, x, y - 1);
