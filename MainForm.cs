@@ -13,6 +13,8 @@ internal sealed class MainForm : Form
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly RemoteSurface _surface = new();
     private bool _connecting;
+    private bool _powerRequestInProgress;
+    private DateTimeOffset _lastPowerRequest = DateTimeOffset.MinValue;
 
     public MainForm()
     {
@@ -67,10 +69,7 @@ internal sealed class MainForm : Form
                 ShowKeyboardHelp();
                 return;
             case "power":
-                if (_remote.IsConnected)
-                    await RunAsync(() => _remote.SendKeyAsync("KEY_POWEROFF"));
-                else
-                    await WakeAsync();
+                await HandlePowerAsync();
                 return;
             case "apps":
                 await SendAsync("KEY_HOME");
@@ -106,6 +105,36 @@ internal sealed class MainForm : Form
             _ => null
         };
         if (key != null) await SendAsync(key);
+    }
+
+    private async Task HandlePowerAsync()
+    {
+        if (_powerRequestInProgress || DateTimeOffset.UtcNow - _lastPowerRequest < TimeSpan.FromSeconds(2))
+            return;
+
+        _powerRequestInProgress = true;
+        try
+        {
+            if (_remote.IsConnected)
+            {
+                await RunAsync(async () =>
+                {
+                    await _remote.SendKeyAsync("KEY_POWER");
+                    AppLog.Info("Samsung power toggle command sent. TV response is not confirmed.");
+                    SetStatus("Power toggle sent · Check the TV");
+                });
+            }
+            else
+            {
+                await WakeAsync();
+            }
+
+            _lastPowerRequest = DateTimeOffset.UtcNow;
+        }
+        finally
+        {
+            _powerRequestInProgress = false;
+        }
     }
 
     private Task SendAsync(string key) => RunAsync(() => _remote.SendKeyAsync(key));
@@ -186,7 +215,8 @@ internal sealed class MainForm : Form
         await RunAsync(async () =>
         {
             await SamsungRemoteClient.WakeAsync(_settings.MacAddress);
-            SetStatus("Wake signal sent · TV power-on is not guaranteed");
+            AppLog.Info("Wake-on-LAN magic packet broadcast for configured TV.");
+            SetStatus("Wake packet sent · Power-on requires TV Wake-on-LAN support");
         });
     }
 
@@ -257,7 +287,9 @@ internal sealed class MainForm : Form
             "Clean TV Remote · Samsung TU690T\n\n" +
             "Tap Living Room TV to enter your TV IP and pair. Approve the request on your Samsung TV. " +
             "Use the purple OK button and the surrounding navigation controls to operate it.\n\n" +
-            "When connected, Power sends Power Off. When disconnected, Power sends a Wake-on-LAN packet only if a TV MAC address is configured. " +
+            "When connected, Power sends Samsung's power toggle key. This may turn the TV off or on, depending on its current state. " +
+            "When disconnected, Power broadcasts a Wake-on-LAN packet using the configured wired or wireless MAC address. " +
+            "Enable Power On with Mobile in the TV's Network Expert Settings if available. Wi-Fi wake support varies by model. " +
             "Apps opens Samsung Home; actual commands available vary by firmware.\n\n" +
             "Connection message:\n" + _settings.TvIp + "\n\n" +
             "The TV and PC must be on the same local network.",
