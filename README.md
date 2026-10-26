@@ -8,14 +8,14 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 
 - Dark charcoal background, soft circular buttons, purple OK button, and red power button
 - TV name and connection indicator across the top
-- Power, Input, Apps, and Keyboard shortcut helper
+- Power, Input, Apps, Netflix, and Keyboard shortcut helper
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
 - A drag-to-adjust volume slider and channel rocker, with mute and info controls
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
-**Apps** opens Samsung Home (`KEY_HOME`). The **Keyboard** button shows supported PC-to-TV remote shortcuts; typing arbitrary text into Samsung TV apps is **not** currently implemented. **Options** opens additional actions such as Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
+**Apps** opens Samsung Home (`KEY_HOME`). **Netflix** requests a launch of Samsung Tizen app `3201907018807` using the local REST application endpoint, with WebSocket fallback. The app must be installed on the TV, and some firmware ignores remote app launches. A request being accepted does not confirm Netflix opened. The **Keyboard** button shows supported PC-to-TV remote shortcuts; typing arbitrary text into Samsung TV apps is **not** currently implemented. **Options** opens additional actions such as Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
 
 ## Build a Windows executable
 
@@ -47,6 +47,7 @@ If you want to wake your TV from standby, also provide its MAC address in the co
 | Power (while disconnected, with MAC configured) | Wake-on-LAN broadcast |
 | Input | `KEY_SOURCE` |
 | Apps / Home | `KEY_HOME` |
+| Netflix | Launch app `3201907018807` over REST, with WebSocket `ed.apps.launch` fallback |
 | Up / Down / Left / Right | `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT` |
 | OK | `KEY_ENTER` |
 | Back | `KEY_RETURN` |
@@ -70,6 +71,7 @@ Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape o
 - **Can't connect:** Verify the TV IPv4 address, that it is on, and that both devices are on the same LAN. Confirm your TV authorized the app. Check router isolation and firewall settings.
 - **Pairing prompt doesn't appear:** Open **Options > Forget pairing**, then connect again and accept the TV prompt. Check TV device permission settings.
 - **Connected but no response:** Try Home or Volume Up. Some Samsung key codes aren't accepted by all firmware versions.
+- **Netflix doesn't open:** Ensure Netflix is installed, the TV is on, and local app launching is supported by its firmware. The request may succeed without the TV opening the app.
 - **Unexpected disconnect:** Use **Options > Reconnect**.
 - **Wake fails:** Check MAC address, Power On with Mobile (if available), and try Ethernet.
 
