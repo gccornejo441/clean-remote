@@ -13,10 +13,20 @@ internal static class Program
                 AppLog.Error("Unhandled application exception.", exception);
             else
                 AppLog.Info($"Unhandled application error: {e.ExceptionObject}");
+
+            AppLog.Shutdown();
         };
 
         ApplicationConfiguration.Initialize();
         AppLog.Info("Application started.");
-        Application.Run(new MainForm());
+
+        try
+        {
+            Application.Run(new MainForm());
+        }
+        finally
+        {
+            AppLog.Shutdown();
+        }
     }
 }

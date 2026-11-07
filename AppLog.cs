@@ -1,10 +1,28 @@
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 
 namespace CleanTVRemote;
 
 internal static class AppLog
 {
-    private static readonly object Gate = new();
+    private const long MaxFileBytes = 2 * 1024 * 1024;
+    private const int MaxEntryChars = 8192;
+
+    private static readonly Channel<string> Entries = Channel.CreateBounded<string>(
+        new BoundedChannelOptions(64)
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
+
+    private static readonly Regex TokenPattern = new(
+        @"(\b(?:token|access_token|refresh_token)\b['""]?\s*[:=]\s*['""]?)[^&\s,'""}]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
+
+    private static readonly Task WriterTask = Task.Run(ProcessEntriesAsync);
 
     public static string LogFilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -15,36 +33,62 @@ internal static class AppLog
 
     public static void Error(string message, Exception exception) => Write("ERROR", message, exception);
 
+    public static void Shutdown()
+    {
+        try
+        {
+            Entries.Writer.TryComplete();
+            WriterTask.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+        }
+    }
+
     private static void Write(string level, string message, Exception? exception)
     {
         try
         {
-            lock (Gate)
-            {
-                string? directory = Path.GetDirectoryName(LogFilePath);
-                if (directory == null) return;
-                Directory.CreateDirectory(directory);
+            string entry = $"{DateTimeOffset.Now:O} [{level}] {message}{Environment.NewLine}";
+            if (exception != null)
+                entry += exception + Environment.NewLine;
 
-                var file = new FileInfo(LogFilePath);
-                if (file.Exists && file.Length > 2 * 1024 * 1024)
-                {
-                    string previousPath = LogFilePath + ".1";
-                    if (File.Exists(previousPath)) File.Delete(previousPath);
-                    File.Move(LogFilePath, previousPath);
-                }
+            if (entry.Length > MaxEntryChars)
+                entry = entry[..MaxEntryChars] + "... [TRUNCATED]" + Environment.NewLine;
 
-                string entry = $"{DateTimeOffset.Now:O} [{level}] {message}{Environment.NewLine}";
-                if (exception != null)
-                {
-                    string details = Regex.Replace(exception.ToString(), "(?i)(token=)[^&\\s\\\"']+", "$1[REDACTED]");
-                    entry += details + Environment.NewLine;
-                }
-                File.AppendAllText(LogFilePath, entry + Environment.NewLine);
-            }
+            entry = TokenPattern.Replace(entry, "$1[REDACTED]");
+            Entries.Writer.TryWrite(entry + Environment.NewLine);
         }
         catch
         {
-            // Logging must never prevent the remote from running.
+        }
+    }
+
+    private static async Task ProcessEntriesAsync()
+    {
+        await foreach (string entry in Entries.Reader.ReadAllAsync())
+        {
+            try
+            {
+                string path = LogFilePath;
+                string? directory = Path.GetDirectoryName(path);
+                if (directory == null)
+                    continue;
+
+                Directory.CreateDirectory(directory);
+
+                var file = new FileInfo(path);
+                if (file.Exists && file.Length + Encoding.UTF8.GetByteCount(entry) > MaxFileBytes)
+                {
+                    string previousPath = path + ".1";
+                    File.Move(path, previousPath, true);
+                }
+
+                await File.AppendAllTextAsync(path, entry, Encoding.UTF8).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
         }
     }
 }
