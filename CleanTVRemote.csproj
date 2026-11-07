@@ -8,5 +8,6 @@
     <AssemblyName>CleanTVRemote</AssemblyName>
     <RootNamespace>CleanTVRemote</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\CleanTVRemote.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>

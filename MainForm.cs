@@ -19,6 +19,7 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         Text = "Clean TV Remote";
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(365, 798);
         MinimumSize = new Size(342, 746);
