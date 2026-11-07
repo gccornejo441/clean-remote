@@ -132,6 +132,60 @@ internal sealed class SamsungRemoteClient : IDisposable
         }
     }
 
+    public async Task SendTextAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Enter text to send.", nameof(text));
+
+        if (text.Length > 256)
+            throw new ArgumentException("Text cannot exceed 256 characters.", nameof(text));
+
+        await _sendGate.WaitAsync();
+        try
+        {
+            ClientWebSocket? socket = _socket;
+            if (socket?.State != WebSocketState.Open)
+                throw new InvalidOperationException("Not connected. Turn on the TV and click Connect.");
+
+            byte[] notification = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                method = "ms.channel.emit",
+                @params = new
+                {
+                    @event = "custom.remote.textReceived",
+                    to = "broadcast"
+                }
+            });
+
+            byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                method = "ms.remote.control",
+                @params = new
+                {
+                    Cmd = Convert.ToBase64String(Encoding.UTF8.GetBytes(text)),
+                    DataOfCmd = "base64",
+                    TypeOfRemote = "SendInputString"
+                }
+            });
+
+            await socket.SendAsync(
+                new ArraySegment<byte>(notification),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None);
+
+            await socket.SendAsync(
+                new ArraySegment<byte>(payload),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None);
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+    }
+
     public async Task LaunchAppAsync(string appId)
     {
         if (string.IsNullOrEmpty(appId) || !appId.All(char.IsAsciiDigit))

@@ -276,7 +276,7 @@ internal sealed class RemoteSurface : Control
         TopAction(g, 97, "input", "Input", "screen", Surface);
         TopAction(g, 160, "apps", "Apps", "apps", Surface);
         TopAction(g, 223, "netflix", "Netflix", "netflix", Surface);
-        TopAction(g, 286, "keyboard", "Keyboard", "keyboard", Surface);
+        TopAction(g, 286, "keyboard", "Type", "keyboard", Surface);
 
         FillCircle(g, 160, 290, 103, Surface);
         PadArrow(g, "up", 160, 208, "up");

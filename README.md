@@ -8,14 +8,14 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 
 - Dark charcoal background, soft circular buttons, purple OK button, and red power button
 - TV name and connection indicator across the top
-- Power, Input, Apps, Netflix, and Keyboard shortcut helper
+- Power, Input, Apps, Netflix, and Type-to-TV text entry
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
 - A drag-to-adjust volume slider and channel rocker, with mute and info controls
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
-**Apps** opens Samsung Home (`KEY_HOME`). **Netflix** requests a launch of Samsung Tizen app `3201907018807` using the local REST application endpoint, with WebSocket fallback. The app must be installed on the TV, and some firmware ignores remote app launches. A request being accepted does not confirm Netflix opened. The **Keyboard** button shows supported PC-to-TV remote shortcuts; typing arbitrary text into Samsung TV apps is **not** currently implemented. **Options** opens additional actions such as Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
+**Apps** opens Samsung Home (`KEY_HOME`). **Netflix** requests a launch of Samsung Tizen app `3201907018807` using the local REST application endpoint, with WebSocket fallback. The app must be installed on the TV, and some firmware ignores remote app launches. A request being accepted does not confirm Netflix opened. The **Type** button opens a text entry dialog for compatible Samsung TV text fields. **Options** includes Keyboard shortcuts, Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
 
 ## Build a Windows executable
 
@@ -40,6 +40,15 @@ The app keeps the pairing token for future connections. Select **Options > Recon
 If you want to wake your TV from standby, also provide its **active network interface's MAC address** in the connection settings: use the TV's wired MAC if the TV uses Ethernet, or wireless MAC if it uses Wi-Fi. If available, enable **Settings > General > Network > Expert Settings > Power On with Mobile**. Power-on via Wake-on-LAN may not work over Wi-Fi or when the TV enters deep standby; it is not a guaranteed power-on method. The TV may take time to start accepting WebSocket connections after waking.
 
 When the remote is connected, Power sends `KEY_POWER` instead of `KEY_POWEROFF`. Samsung Tizen models vary in their support for explicit power-off codes. `KEY_POWER` is a **toggle**, not a guaranteed off command; avoid repeated clicks when the TV takes time to respond. The app does not have reliable power-state feedback and intentionally reports only that a command or packet was sent.
+
+## Type text on the TV
+
+1. Connect Clean TV Remote to the Samsung TV.
+2. On the TV, open and focus a native text field (for example the built-in browser address bar).
+3. Click **Type**, enter a search phrase, and click **Send text**.
+4. If the text appears on the TV, use the remote's **OK** button to submit it if needed.
+
+The app sends UTF-8 text using Samsung's `SendInputString` WebSocket command. The command being sent does **not** confirm that the TV accepted the text. Netflix, YouTube, and some other streaming apps use their own keyboard screens and may ignore remote text input. The feature does not inject physical keyboard keys into those apps, and it does not automatically press OK. The remote does not retain or log the text you enter.
 
 ## Controls
 
@@ -66,13 +75,14 @@ The volume slider sends `KEY_VOLUP` or `KEY_VOLDOWN` steps as you drag it. The T
 
 ### Windows keyboard shortcuts
 
-Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape or Backspace for Back; Home for Samsung Home; plus/minus for volume; M for mute; Page Up/Down for channels; Space for Play. Click **Keyboard** for the in-app shortcut guide.
+Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape or Backspace for Back; Home for Samsung Home; plus/minus for volume; M for mute; Page Up/Down for channels; Space for Play. Open **Options > Keyboard shortcuts** for the in-app shortcut guide.
 
 ## Troubleshooting
 
 - **Can't connect:** Verify the TV IPv4 address, that it is on, and that both devices are on the same LAN. Confirm your TV authorized the app. Check router isolation and firewall settings.
 - **Pairing prompt doesn't appear:** Open **Options > Forget pairing**, then connect again and accept the TV prompt. Check TV device permission settings.
 - **Connected but no response:** Try Home or Volume Up. Some Samsung key codes aren't accepted by all firmware versions.
+- **Text does not appear:** Focus a native Samsung text field with the TV keyboard visible, then use **Type**. Many third-party streaming search keyboards, including Netflix and YouTube, do not accept this command.
 - **Netflix doesn't open:** Ensure Netflix is installed, the TV is on, and local app launching is supported by its firmware. The request may succeed without the TV opening the app.
 - **Unexpected disconnect:** Use **Options > Reconnect**.
 - **Power button doesn't turn off the TV:** With the TV on, verify the app is connected and Home or Volume works. The button now sends `KEY_POWER`, which is more widely supported than `KEY_POWEROFF`, but model support still varies.
@@ -89,6 +99,7 @@ Diagnostic logs are stored in `%APPDATA%\CleanTVRemote\app.log`. They include co
 - `MainForm.cs`: action routing, status handling, pairing and extra actions
 - `RemoteSurface.cs`: scalable dark remote UI, painting, hit targets and keyboard support
 - `ConnectionDialog.cs`: TV connection and pairing settings dialog
+- `TextInputDialog.cs`: local text-entry dialog for compatible Samsung TV input fields
 - `SamsungRemoteClient.cs`: existing Samsung WebSocket commands and Wake-on-LAN implementation
 - `AppSettings.cs`: existing local settings persistence
 - `AppLog.cs`: local diagnostic logging with pairing-token redaction

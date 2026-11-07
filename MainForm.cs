@@ -67,7 +67,7 @@ internal sealed class MainForm : Form
                 ShowOptions();
                 return;
             case "keyboard":
-                ShowKeyboardHelp();
+                await ShowTextInputAsync();
                 return;
             case "power":
                 await HandlePowerAsync();
@@ -252,6 +252,7 @@ internal sealed class MainForm : Form
         menu.Items.Add("Reconnect", null, async (_, _) => await RunAsync(ConnectAsync));
         menu.Items.Add("Wake TV", null, async (_, _) => await WakeAsync());
         menu.Items.Add("Open diagnostic log", null, (_, _) => OpenDiagnosticLog());
+        menu.Items.Add("Keyboard shortcuts", null, (_, _) => ShowKeyboardHelp());
         menu.Items.Add("Samsung Menu", null, async (_, _) => await SendAsync("KEY_MENU"));
         menu.Items.Add("Pause playback", null, async (_, _) => await SendAsync("KEY_PAUSE"));
         menu.Items.Add(new ToolStripSeparator());
@@ -262,6 +263,26 @@ internal sealed class MainForm : Form
         });
         menu.Items.Add("Forget pairing", null, (_, _) => ClearPairing());
         menu.Show(_surface, new Point(Math.Max(10, _surface.Width / 2 - 80), Math.Max(30, _surface.Height / 2)));
+    }
+
+    private async Task ShowTextInputAsync()
+    {
+        if (!_remote.IsConnected)
+        {
+            SetStatus("Connect to the TV before sending text.");
+            return;
+        }
+
+        using var dialog = new TextInputDialog();
+        DialogResult result = dialog.ShowDialog(this);
+        _surface.Focus();
+        if (result != DialogResult.OK) return;
+
+        await RunAsync(async () =>
+        {
+            await _remote.SendTextAsync(dialog.EnteredText);
+            SetStatus("Text command sent · TV support is not confirmed");
+        });
     }
 
     private void ShowKeyboardHelp()
@@ -277,7 +298,7 @@ internal sealed class MainForm : Form
             "PgUp / PgDn   Channel up / down\n" +
             "Space         Play\n\n" +
             "Drag the volume slider up or down to send volume steps. The TV does not report its current level, so the slider adjusts volume relatively.\n\n" +
-            "Typing text into Samsung apps is not implemented. This is a keyboard shortcut guide, not a text-entry feature.",
+            "To type text, click Type on the remote while a supported TV text field is focused. Some streaming apps do not support this.",
             "Keyboard control", MessageBoxButtons.OK, MessageBoxIcon.Information);
         _surface.Focus();
     }
