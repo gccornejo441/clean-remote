@@ -297,7 +297,7 @@ internal sealed class MainForm : Form
             "M             Mute\n" +
             "PgUp / PgDn   Channel up / down\n" +
             "Space         Play\n\n" +
-            "Drag the volume slider up or down to send volume steps. The TV does not report its current level, so the slider adjusts volume relatively.\n\n" +
+            "Click the VOL up/down arrows to change the TV volume. The TV does not report its current volume level.\n\n" +
             "To type text, click Type on the remote while a supported TV text field is focused. Some streaming apps do not support this.",
             "Keyboard control", MessageBoxButtons.OK, MessageBoxIcon.Information);
         _surface.Focus();

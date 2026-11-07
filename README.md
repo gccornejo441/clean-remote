@@ -11,7 +11,7 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 - Power, Input, Apps, Netflix, and Type-to-TV text entry
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
-- A drag-to-adjust volume slider and channel rocker, with mute and info controls
+- Volume up/down arrow buttons and channel rocker, with mute and info controls
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
@@ -71,7 +71,7 @@ The app sends UTF-8 text using Samsung's `SendInputString` WebSocket command. Th
 
 Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
 
-The volume slider sends `KEY_VOLUP` or `KEY_VOLDOWN` steps as you drag it. The TV does not report its current volume to the app, so the slider adjusts relatively and does not display the TV's actual level.
+Click the volume up/down arrows to send `KEY_VOLUP` or `KEY_VOLDOWN` one step at a time. The TV does not report its current volume to the app.
 
 ### Windows keyboard shortcuts
 
