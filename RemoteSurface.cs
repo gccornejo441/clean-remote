@@ -50,6 +50,8 @@ internal sealed class RemoteSurface : Control
     private string _status = "Tap Living Room TV to connect";
     private string _tvName = "Living Room TV";
     private bool _connected;
+    private int _volumeWheelDelta;
+
     public event Action<string>? ActionRequested;
 
     public RemoteSurface()
@@ -101,9 +103,34 @@ internal sealed class RemoteSurface : Control
         }
     }
 
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        PointF point = ToDesignPoint(e.Location);
+        bool overVolume = point.X >= 17 && point.X <= 77 && point.Y >= 469 && point.Y <= 605;
+
+        if (!overVolume)
+        {
+            _volumeWheelDelta = 0;
+            base.OnMouseWheel(e);
+            return;
+        }
+
+        _volumeWheelDelta += e.Delta;
+        int steps = Math.Min(3, Math.Abs(_volumeWheelDelta) / SystemInformation.MouseWheelScrollDelta);
+
+        if (steps > 0)
+        {
+            string action = _volumeWheelDelta > 0 ? "vol_up" : "vol_down";
+            _volumeWheelDelta %= SystemInformation.MouseWheelScrollDelta;
+            for (int i = 0; i < steps; i++)
+                ActionRequested?.Invoke(action);
+        }
+    }
+
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
+        _volumeWheelDelta = 0;
         _hover = null;
         _pressed = null;
         Cursor = Cursors.Default;

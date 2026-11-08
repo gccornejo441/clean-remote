@@ -12,6 +12,8 @@ internal sealed class MainForm : Form
     private readonly SamsungRemoteClient _remote = new();
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly RemoteSurface _surface = new();
+    private NotifyIcon? _trayIcon;
+    private ContextMenuStrip? _trayMenu;
     private bool _connecting;
     private bool _powerRequestInProgress;
     private DateTimeOffset _lastPowerRequest = DateTimeOffset.MinValue;
@@ -28,6 +30,27 @@ internal sealed class MainForm : Form
         Font = new Font("Segoe UI", 10);
         AutoScaleMode = AutoScaleMode.Dpi;
         KeyPreview = true;
+        TopMost = _settings.AlwaysOnTop;
+
+        _trayMenu = new ContextMenuStrip
+        {
+            BackColor = Surface,
+            ForeColor = Foreground,
+            ShowImageMargin = false
+        };
+        _trayMenu.Items.Add("Open Clean TV Remote", null, (_, _) => RestoreFromTray());
+        _trayMenu.Items.Add("Exit", null, (_, _) => Close());
+        _trayIcon = new NotifyIcon
+        {
+            Icon = Icon,
+            Text = "Clean TV Remote",
+            ContextMenuStrip = _trayMenu
+        };
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+                RestoreFromTray();
+        };
 
         _surface.Dock = DockStyle.Fill;
         _surface.SetTvName(_settings.ActiveProfile.Name);
@@ -47,8 +70,39 @@ internal sealed class MainForm : Form
         };
     }
 
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+
+        if (WindowState == FormWindowState.Minimized && _trayIcon is not null && !Disposing)
+        {
+            _trayIcon.Visible = true;
+            Hide();
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        if (IsDisposed || Disposing)
+            return;
+
+        Show();
+        WindowState = FormWindowState.Normal;
+        if (_trayIcon is not null)
+            _trayIcon.Visible = false;
+        Activate();
+        _surface.Focus();
+    }
+
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        if (_trayIcon is not null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+        }
+
+        _trayMenu?.Dispose();
         _remote.Dispose();
         base.OnFormClosed(e);
     }
@@ -253,6 +307,13 @@ internal sealed class MainForm : Form
         menu.Items.Add("Wake TV", null, async (_, _) => await WakeAsync());
         menu.Items.Add("Open diagnostic log", null, (_, _) => OpenDiagnosticLog());
         menu.Items.Add("Keyboard shortcuts", null, (_, _) => ShowKeyboardHelp());
+        var alwaysOnTop = new ToolStripMenuItem("Always on top")
+        {
+            Checked = TopMost,
+            CheckOnClick = true
+        };
+        alwaysOnTop.CheckedChanged += (_, _) => SetAlwaysOnTop(alwaysOnTop.Checked);
+        menu.Items.Add(alwaysOnTop);
         menu.Items.Add("Samsung Menu", null, async (_, _) => await SendAsync("KEY_MENU"));
         menu.Items.Add("Pause playback", null, async (_, _) => await SendAsync("KEY_PAUSE"));
         menu.Items.Add(new ToolStripSeparator());
@@ -263,6 +324,22 @@ internal sealed class MainForm : Form
         });
         menu.Items.Add("Forget pairing", null, (_, _) => ClearPairing());
         menu.Show(_surface, new Point(Math.Max(10, _surface.Width / 2 - 80), Math.Max(30, _surface.Height / 2)));
+    }
+
+    private void SetAlwaysOnTop(bool enabled)
+    {
+        TopMost = enabled;
+        _settings.AlwaysOnTop = enabled;
+
+        try
+        {
+            _settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("Could not save always-on-top preference.", ex);
+            SetStatus($"Could not save window preference: {ex.Message}");
+        }
     }
 
     private async Task ShowTextInputAsync()
