@@ -125,4 +125,12 @@ internal sealed class TvProfile
     public string MacAddress { get; set; } = "";
     public bool Secure { get; set; } = true;
     public string Token { get; set; } = "";
+    public List<AppShortcut> FavoriteApps { get; set; } = [];
+}
+
+internal sealed class AppShortcut
+{
+    public string Name { get; set; } = "";
+    public string AppId { get; set; } = "";
+    public override string ToString() => $"{Name} ({AppId})";
 }

@@ -20,6 +20,8 @@ internal sealed class MainForm : Form
     private bool _repeatCommandInFlight;
     private bool _closing;
     private readonly System.Windows.Forms.Timer _reconnectTimer = new() { Interval = 2000 };
+    private readonly System.Windows.Forms.Timer _sleepTimer = new() { Interval = 1000 };
+    private DateTimeOffset? _sleepDeadline;
     private CancellationTokenSource? _connectCancellation;
     private DateTimeOffset _nextReconnectAt = DateTimeOffset.MinValue;
     private DateTimeOffset? _lastConnectAt;
@@ -80,6 +82,27 @@ internal sealed class MainForm : Form
         };
         _reconnectTimer.Start();
 
+        _sleepTimer.Tick += async (_, _) =>
+        {
+            if (_closing || _sleepDeadline is null || DateTimeOffset.UtcNow < _sleepDeadline.Value)
+                return;
+
+            _sleepDeadline = null;
+            _sleepTimer.Stop();
+
+            if (!_remote.IsConnected)
+            {
+                SetStatus("Sleep timer expired · TV is disconnected; no power command sent");
+                return;
+            }
+
+            await RunAsync(async () =>
+            {
+                await _remote.SendKeyAsync("KEY_POWER");
+                SetStatus("Sleep timer power toggle sent · TV state not confirmed");
+            });
+        };
+
         _remote.StatusChanged += SetStatus;
         _remote.PairingTokenChanged += UpdateToken;
         Shown += async (_, _) =>
@@ -119,6 +142,9 @@ internal sealed class MainForm : Form
         _closing = true;
         _reconnectTimer.Stop();
         _reconnectTimer.Dispose();
+        _sleepDeadline = null;
+        _sleepTimer.Stop();
+        _sleepTimer.Dispose();
         _connectCancellation?.Cancel();
         if (_trayIcon is not null)
         {
@@ -151,7 +177,7 @@ internal sealed class MainForm : Form
                 await HandlePowerAsync();
                 return;
             case "apps":
-                await SendAsync("KEY_HOME");
+                ShowAppsMenu();
                 return;
             case "netflix":
                 await RunAsync(async () =>
@@ -401,6 +427,19 @@ internal sealed class MainForm : Form
         menu.Items.Add("Wake TV", null, async (_, _) => await WakeAsync());
         menu.Items.Add("Open diagnostic log", null, (_, _) => OpenDiagnosticLog());
         menu.Items.Add("Connection diagnostics", null, (_, _) => ShowConnectionDiagnostics());
+        menu.Items.Add("Favorite apps", null, (_, _) => ConfigureFavoriteApps());
+        menu.Items.Add("Numeric channel keypad", null, (_, _) => ShowNumericKeypad());
+        menu.Items.Add(_sleepDeadline is null
+            ? "Set sleep timer"
+            : $"Sleep timer · {Math.Max(1, (int)Math.Ceiling((_sleepDeadline.Value - DateTimeOffset.UtcNow).TotalMinutes))} minutes remaining",
+            null, (_, _) => ShowSleepTimerDialog());
+        if (_sleepDeadline is not null)
+            menu.Items.Add("Cancel sleep timer", null, (_, _) =>
+            {
+                _sleepDeadline = null;
+                _sleepTimer.Stop();
+                SetStatus("Sleep timer canceled");
+            });
         menu.Items.Add("Keyboard shortcuts", null, (_, _) => ShowKeyboardHelp());
         var alwaysOnTop = new ToolStripMenuItem("Always on top")
         {
@@ -419,6 +458,182 @@ internal sealed class MainForm : Form
         });
         menu.Items.Add("Forget pairing", null, (_, _) => ClearPairing());
         menu.Show(_surface, new Point(Math.Max(10, _surface.Width / 2 - 80), Math.Max(30, _surface.Height / 2)));
+    }
+
+    private void ShowAppsMenu()
+    {
+        var menu = new ContextMenuStrip
+        {
+            BackColor = Surface,
+            ForeColor = Foreground,
+            ShowImageMargin = false
+        };
+        menu.Items.Add("Samsung Home", null, async (_, _) => await SendAsync("KEY_HOME"));
+        menu.Items.Add("Netflix", null, async (_, _) => await LaunchFavoriteAsync("3201907018807", "Netflix"));
+
+        foreach (AppShortcut shortcut in _settings.ActiveProfile.FavoriteApps ?? [])
+        {
+            string id = shortcut.AppId;
+            string name = shortcut.Name;
+            menu.Items.Add(name, null, async (_, _) => await LaunchFavoriteAsync(id, name));
+        }
+
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Manage favorites", null, (_, _) => ConfigureFavoriteApps());
+        menu.Show(_surface, new Point(Math.Max(10, _surface.Width / 2 - 70), 150));
+    }
+
+    private Task LaunchFavoriteAsync(string appId, string name) => RunAsync(async () =>
+    {
+        await _remote.LaunchAppAsync(appId);
+        SetStatus($"{name} launch requested · TV response not confirmed");
+    });
+
+    private void ConfigureFavoriteApps()
+    {
+        using var dialog = new FavoriteAppsDialog(_settings.ActiveProfile.FavoriteApps ?? []);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        _settings.ActiveProfile.FavoriteApps = dialog.Result;
+        try
+        {
+            _settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("Could not save favorite apps.", ex);
+            SetStatus($"Could not save favorites: {ex.Message}");
+        }
+        _surface.Focus();
+    }
+
+    private void ShowNumericKeypad()
+    {
+        using var dialog = new Form
+        {
+            Text = "Numeric channel keypad",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            ClientSize = new Size(260, 382),
+            BackColor = Background,
+            ForeColor = Foreground,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+
+        string[] digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "Enter"];
+        for (int i = 0; i < digits.Length; i++)
+        {
+            string digit = digits[i];
+            if (digit.Length == 0) continue;
+            var button = new Button
+            {
+                Text = digit,
+                Bounds = new Rectangle(18 + (i % 3) * 76, 16 + (i / 3) * 66, 70, 58),
+                BackColor = Surface,
+                ForeColor = Foreground,
+                FlatStyle = FlatStyle.Flat
+            };
+            button.FlatAppearance.BorderSize = 0;
+            button.Click += async (_, _) =>
+                await SendAsync(digit == "Enter" ? "KEY_ENTER" : $"KEY_{digit}");
+            dialog.Controls.Add(button);
+        }
+
+        dialog.Controls.Add(new Label
+        {
+            Text = "Some TV apps and inputs ignore numeric keys.",
+            Bounds = new Rectangle(18, 286, 224, 39),
+            ForeColor = Foreground
+        });
+        var close = new Button
+        {
+            Text = "Close",
+            DialogResult = DialogResult.OK,
+            Bounds = new Rectangle(145, 334, 97, 35)
+        };
+        dialog.Controls.Add(close);
+        dialog.AcceptButton = close;
+        dialog.ShowDialog(this);
+        _surface.Focus();
+    }
+
+    private void ShowSleepTimerDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Sleep timer",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            ClientSize = new Size(385, 240),
+            BackColor = Background,
+            ForeColor = Foreground,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+
+        var remaining = new Label
+        {
+            Text = _sleepDeadline is null
+                ? "No sleep timer currently scheduled."
+                : $"Current timer: {Math.Max(1, (int)Math.Ceiling((_sleepDeadline.Value - DateTimeOffset.UtcNow).TotalMinutes))} minutes remaining",
+            Bounds = new Rectangle(18, 12, 345, 31),
+            ForeColor = Foreground
+        };
+        dialog.Controls.Add(remaining);
+        var warning = new Label
+        {
+            Text = "The TV power key is a toggle, not a guaranteed off command. Verify the TV state before scheduling.",
+            Bounds = new Rectangle(18, 47, 345, 62),
+            ForeColor = Foreground
+        };
+        dialog.Controls.Add(warning);
+
+        var minutes = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = 240,
+            Value = 30,
+            Bounds = new Rectangle(18, 117, 100, 30)
+        };
+        dialog.Controls.Add(minutes);
+        dialog.Controls.Add(new Label
+        {
+            Text = "minutes",
+            Bounds = new Rectangle(125, 117, 90, 30),
+            ForeColor = Foreground
+        });
+        var set = new Button
+        {
+            Text = "Set timer",
+            Bounds = new Rectangle(254, 165, 109, 36),
+            DialogResult = DialogResult.OK
+        };
+        dialog.Controls.Add(set);
+        var cancelTimer = new Button
+        {
+            Text = "Cancel timer",
+            Enabled = _sleepDeadline is not null,
+            Bounds = new Rectangle(18, 165, 125, 36),
+            DialogResult = DialogResult.Retry
+        };
+        dialog.Controls.Add(cancelTimer);
+
+        if (dialog.ShowDialog(this) == DialogResult.Retry)
+        {
+            _sleepDeadline = null;
+            _sleepTimer.Stop();
+            SetStatus("Sleep timer canceled");
+        }
+        else if (dialog.DialogResult == DialogResult.OK)
+        {
+            _sleepDeadline = DateTimeOffset.UtcNow.AddMinutes((double)minutes.Value);
+            _sleepTimer.Start();
+            SetStatus($"Sleep timer scheduled for {minutes.Value} minutes · Power is a toggle");
+        }
+
+        _surface.Focus();
     }
 
     private void SetAlwaysOnTop(bool enabled)

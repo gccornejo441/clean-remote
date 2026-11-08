@@ -8,7 +8,7 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 
 - Dark charcoal background, soft circular buttons, purple OK button, and red power button
 - TV name and connection indicator across the top
-- Power, Input, Apps, Netflix, and Type-to-TV text entry
+- Power, Input, configurable favorite app launch shortcuts, Netflix, and Type-to-TV text entry
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
 - Volume up/down arrow buttons, optional mouse-wheel volume control, and channel rocker, with mute and info controls
@@ -16,7 +16,7 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
-**Apps** opens Samsung Home (`KEY_HOME`). **Netflix** requests a launch of Samsung Tizen app `3201907018807` using the local REST application endpoint, with WebSocket fallback. The app must be installed on the TV, and some firmware ignores remote app launches. A request being accepted does not confirm Netflix opened. The **Type** button opens a text entry dialog for compatible Samsung TV text fields. **Options** includes Keyboard shortcuts, Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
+**Apps** opens a shortcuts menu containing Samsung Home, Netflix, and per-TV custom favorite app shortcuts. **Netflix** requests a launch of Samsung Tizen app `3201907018807` using the local REST application endpoint, with WebSocket fallback. The app must be installed on the TV, and some firmware ignores remote app launches. A request being accepted does not confirm Netflix opened. The **Type** button opens a text entry dialog for compatible Samsung TV text fields. **Options** includes Keyboard shortcuts, Samsung Menu, Pause, Wake TV, reconnect, and pairing management.
 
 ## Build a Windows executable
 
@@ -56,6 +56,14 @@ The app sends UTF-8 text using Samsung's `SendInputString` WebSocket command. Th
 The app automatically retries transient TV disconnections with increasing intervals (up to 30 seconds); choosing **Disconnect** disables retries until **Reconnect** or connecting to a profile. See **Options > Connection diagnostics** for connection state, timing, next retry, last error, and a Copy diagnostics action. Pairing tokens are excluded.
 
 Hold VOL or CH arrows to repeat commands after a short delay, or click once to send a single step. The repeat sender permits only one in-flight command to avoid excessive network traffic.
+
+## Favorite apps, keypad, and sleep timer
+
+Open **Apps > Manage favorites** or **Options > Favorite apps** to add up to eight custom streaming shortcuts per TV profile. Enter a name and a numeric Samsung Tizen app ID. App launch support is firmware-dependent, and an accepted request does not prove that the TV opened the app. The dedicated Netflix button remains available.
+
+Use **Options > Numeric channel keypad** for digits 0–9 and Enter; TV support varies by source and application.
+
+Use **Options > Set sleep timer** to schedule one power-toggle command in 1–240 minutes, or cancel a running timer in the same menu. This does not guarantee power-off: if the TV is already off, a power toggle may turn it on. The timer is canceled when the remote application exits and will not fire while it is closed.
 
 ## Controls
 
