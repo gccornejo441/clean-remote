@@ -4,11 +4,11 @@ namespace CleanTVRemote;
 
 internal sealed class TextInputDialog : Form
 {
-    private static readonly Color Background = Color.FromArgb(19, 18, 24);
-    private static readonly Color Surface = Color.FromArgb(44, 42, 55);
-    private static readonly Color Foreground = Color.FromArgb(242, 240, 249);
-    private static readonly Color Muted = Color.FromArgb(153, 148, 171);
-    private static readonly Color Purple = Color.FromArgb(125, 72, 255);
+    private static Color Background => ThemePalette.Background;
+    private static Color Surface => ThemePalette.Surface;
+    private static Color Foreground => ThemePalette.Foreground;
+    private static Color Muted => ThemePalette.Muted;
+    private static Color Purple => ThemePalette.Purple;
 
     private readonly TextBox _text = new();
 
