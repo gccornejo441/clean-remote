@@ -8,14 +8,14 @@ internal sealed class RemoteSurface : Control
     private const float DesignWidth = 320f;
     private const float DesignHeight = 704f;
 
-    private static readonly Color Background = Color.FromArgb(19, 18, 24);
-    private static readonly Color Surface = Color.FromArgb(44, 42, 55);
-    private static readonly Color Lifted = Color.FromArgb(58, 55, 72);
-    private static readonly Color TextPrimary = Color.FromArgb(242, 240, 249);
-    private static readonly Color TextSecondary = Color.FromArgb(153, 148, 171);
-    private static readonly Color Purple = Color.FromArgb(125, 72, 255);
-    private static readonly Color Red = Color.FromArgb(231, 53, 66);
-    private static readonly Color Green = Color.FromArgb(35, 207, 109);
+    private static Color Background => ThemePalette.Background;
+    private static Color Surface => ThemePalette.Surface;
+    private static Color Lifted => ThemePalette.Lifted;
+    private static Color TextPrimary => ThemePalette.Foreground;
+    private static Color TextSecondary => ThemePalette.Muted;
+    private static Color Purple => ThemePalette.Purple;
+    private static Color Red => ThemePalette.Red;
+    private static Color Green => ThemePalette.Green;
 
     private readonly (string Id, RectangleF Area)[] _targets =
     [

@@ -6,7 +6,7 @@ A compact Windows remote for Samsung Tizen TVs, including the Samsung TU690T (`U
 
 The main window uses a dark, narrow layout inspired by the provided remote screenshot:
 
-- Dark charcoal background, soft circular buttons, purple OK button, and red power button
+- Dark charcoal background (switchable to a light palette), soft circular buttons, purple OK button, and red power button
 - TV name and connection indicator across the top
 - Power, Input, configurable favorite app launch shortcuts, Netflix, and Type-to-TV text entry
 - Large circular four-way navigation pad with OK in the center
@@ -68,6 +68,12 @@ Use **Options > Numeric channel keypad** for digits 0–9 and Enter; TV support 
 
 Use **Options > Set sleep timer** to schedule one power-toggle command in 1–240 minutes, or cancel a running timer in the same menu. This does not guarantee power-off: if the TV is already off, a power toggle may turn it on. The timer is canceled when the remote application exits and will not fire while it is closed.
 
+## Command macros
+
+Use **Options > Command macros > Manage macros** to create a named sequence. Enter commands separated by commas or newlines, for example `HOME:300, RIGHT:200, RIGHT:200, OK`. The optional number after a colon is a post-command delay in milliseconds, capped at 1500. Only supported navigation, media, volume and channel commands are accepted, with a maximum of 12 steps and 8 saved macros per TV.
+
+Run a macro from **Options > Command macros**. You can cancel it in the same menu; disconnection or exiting the app also cancels remaining commands. Each step is sent separately, and the TV's UI may change between steps, so the sequence is not guaranteed to produce the same outcome on all apps.
+
 ## Controls
 
 | UI | Samsung command |
@@ -90,6 +96,10 @@ Use **Options > Set sleep timer** to schedule one power-toggle command in 1–24
 Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
 
 Click the volume up/down arrows to send `KEY_VOLUP` or `KEY_VOLDOWN` one step at a time. With the remote focused, hover over the volume control and scroll the mouse wheel to adjust volume (up to three steps per wheel event). The TV does not report its current volume to the app.
+
+### Themes
+
+Choose **Options > Light theme** to switch to a brighter palette; uncheck to restore dark mode. The preference is persisted in local settings, and newly opened dialogs and menus follow the selected theme. Dark mode is the default.
 
 ### Windows tray and window options
 

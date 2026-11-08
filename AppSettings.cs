@@ -12,6 +12,7 @@ internal sealed class AppSettings
     public string ActiveProfileId { get; set; } = "";
     public bool AlwaysOnTop { get; set; }
     public bool GlobalHotkeysEnabled { get; set; }
+    public bool LightTheme { get; set; }
 
     [JsonIgnore]
     public TvProfile ActiveProfile
@@ -127,6 +128,7 @@ internal sealed class TvProfile
     public bool Secure { get; set; } = true;
     public string Token { get; set; } = "";
     public List<AppShortcut> FavoriteApps { get; set; } = [];
+    public List<RemoteMacro> Macros { get; set; } = [];
 }
 
 internal sealed class AppShortcut
@@ -134,4 +136,17 @@ internal sealed class AppShortcut
     public string Name { get; set; } = "";
     public string AppId { get; set; } = "";
     public override string ToString() => $"{Name} ({AppId})";
+}
+
+internal sealed class RemoteMacro
+{
+    public string Name { get; set; } = "";
+    public List<RemoteMacroStep> Steps { get; set; } = [];
+    public override string ToString() => Name;
+}
+
+internal sealed class RemoteMacroStep
+{
+    public string Key { get; set; } = "";
+    public int DelayMs { get; set; }
 }

@@ -4,9 +4,9 @@ namespace CleanTVRemote;
 
 internal sealed class FavoriteAppsDialog : Form
 {
-    private static readonly Color Background = Color.FromArgb(19, 18, 24);
-    private static readonly Color Foreground = Color.FromArgb(242, 240, 249);
-    private static readonly Color Surface = Color.FromArgb(44, 42, 55);
+    private static Color Background => ThemePalette.Background;
+    private static Color Foreground => ThemePalette.Foreground;
+    private static Color Surface => ThemePalette.Surface;
 
     private readonly ListBox _apps = new();
     private readonly TextBox _name = new();
@@ -40,9 +40,13 @@ internal sealed class FavoriteAppsDialog : Form
         Controls.Add(new Label { Text = "Shortcut name", Bounds = new Rectangle(16, 169, 140, 22) });
         Controls.Add(new Label { Text = "Numeric Tizen app ID", Bounds = new Rectangle(176, 169, 238, 22) });
         _name.Bounds = new Rectangle(16, 194, 150, 30);
+        _name.BackColor = Surface;
+        _name.ForeColor = Foreground;
         _name.MaxLength = 28;
         _name.PlaceholderText = "YouTube";
         _appId.Bounds = new Rectangle(176, 194, 238, 30);
+        _appId.BackColor = Surface;
+        _appId.ForeColor = Foreground;
         _appId.MaxLength = 32;
         _appId.PlaceholderText = "Enter your TV's app ID";
         Controls.Add(_name);
@@ -97,5 +101,12 @@ internal sealed class FavoriteAppsDialog : Form
         };
         Controls.Add(cancel);
         CancelButton = cancel;
+
+        foreach (Button button in Controls.OfType<Button>())
+        {
+            button.BackColor = Surface;
+            button.ForeColor = Foreground;
+            button.FlatStyle = FlatStyle.Flat;
+        }
     }
 }

@@ -15,9 +15,9 @@ internal sealed class MainForm : Form
 
     [DllImport("user32.dll")]
     private static extern bool UnregisterHotKey(IntPtr window, int id);
-    private static readonly Color Background = Color.FromArgb(19, 18, 24);
-    private static readonly Color Surface = Color.FromArgb(44, 42, 55);
-    private static readonly Color Foreground = Color.FromArgb(242, 240, 249);
+    private static Color Background => ThemePalette.Background;
+    private static Color Surface => ThemePalette.Surface;
+    private static Color Foreground => ThemePalette.Foreground;
 
     private readonly SamsungRemoteClient _remote = new();
     private readonly AppSettings _settings = AppSettings.Load();
@@ -32,6 +32,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _reconnectTimer = new() { Interval = 2000 };
     private readonly System.Windows.Forms.Timer _sleepTimer = new() { Interval = 1000 };
     private DateTimeOffset? _sleepDeadline;
+    private CancellationTokenSource? _macroCancellation;
     private CancellationTokenSource? _connectCancellation;
     private DateTimeOffset _nextReconnectAt = DateTimeOffset.MinValue;
     private DateTimeOffset? _lastConnectAt;
@@ -42,6 +43,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
+        ThemePalette.Light = _settings.LightTheme;
         Text = "Clean TV Remote";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
         StartPosition = FormStartPosition.CenterScreen;
@@ -74,6 +76,8 @@ internal sealed class MainForm : Form
                 RestoreFromTray();
         };
 
+        _surface.BackColor = Background;
+        _surface.ForeColor = Foreground;
         _surface.Dock = DockStyle.Fill;
         _surface.SetTvName(_settings.ActiveProfile.Name);
         _surface.SetConnection(string.IsNullOrWhiteSpace(_settings.TvIp)
@@ -233,6 +237,7 @@ internal sealed class MainForm : Form
         _sleepDeadline = null;
         _sleepTimer.Stop();
         _sleepTimer.Dispose();
+        _macroCancellation?.Cancel();
         _connectCancellation?.Cancel();
         if (_trayIcon is not null)
         {
@@ -361,6 +366,7 @@ internal sealed class MainForm : Form
 
     private void DisconnectManually()
     {
+        _macroCancellation?.Cancel();
         _manualDisconnected = true;
         _connectCancellation?.Cancel();
         _remote.Disconnect();
@@ -396,6 +402,7 @@ internal sealed class MainForm : Form
         if (result != DialogResult.OK) return;
 
         _manualDisconnected = true;
+        _macroCancellation?.Cancel();
         _connectCancellation?.Cancel();
         _remote.Disconnect();
         _settings.ActiveProfileId = dialog.SelectedProfile.Id;
@@ -517,6 +524,19 @@ internal sealed class MainForm : Form
         menu.Items.Add("Connection diagnostics", null, (_, _) => ShowConnectionDiagnostics());
         menu.Items.Add("Favorite apps", null, (_, _) => ConfigureFavoriteApps());
         menu.Items.Add("Numeric channel keypad", null, (_, _) => ShowNumericKeypad());
+        var macroMenu = new ToolStripMenuItem("Command macros");
+        foreach (RemoteMacro macro in _settings.ActiveProfile.Macros ?? [])
+        {
+            RemoteMacro chosen = macro;
+            macroMenu.DropDownItems.Add(chosen.Name, null, async (_, _) => await RunMacroAsync(chosen));
+        }
+
+        if (_macroCancellation is not null)
+            macroMenu.DropDownItems.Add("Cancel running macro", null, (_, _) => _macroCancellation?.Cancel());
+
+        macroMenu.DropDownItems.Add(new ToolStripSeparator());
+        macroMenu.DropDownItems.Add("Manage macros", null, (_, _) => ConfigureMacros());
+        menu.Items.Add(macroMenu);
         menu.Items.Add(_sleepDeadline is null
             ? "Set sleep timer"
             : $"Sleep timer · {Math.Max(1, (int)Math.Ceiling((_sleepDeadline.Value - DateTimeOffset.UtcNow).TotalMinutes))} minutes remaining",
@@ -542,6 +562,9 @@ internal sealed class MainForm : Form
         };
         alwaysOnTop.CheckedChanged += (_, _) => SetAlwaysOnTop(alwaysOnTop.Checked);
         menu.Items.Add(alwaysOnTop);
+        var lightTheme = new ToolStripMenuItem("Light theme") { Checked = _settings.LightTheme };
+        lightTheme.Click += (_, _) => SetLightTheme(!_settings.LightTheme);
+        menu.Items.Add(lightTheme);
         menu.Items.Add("Samsung Menu", null, async (_, _) => await SendAsync("KEY_MENU"));
         menu.Items.Add("Pause playback", null, async (_, _) => await SendAsync("KEY_PAUSE"));
         menu.Items.Add(new ToolStripSeparator());
@@ -645,6 +668,8 @@ internal sealed class MainForm : Form
         {
             Text = "Close",
             DialogResult = DialogResult.OK,
+            BackColor = Surface,
+            ForeColor = Foreground,
             Bounds = new Rectangle(145, 334, 97, 35)
         };
         dialog.Controls.Add(close);
@@ -689,7 +714,9 @@ internal sealed class MainForm : Form
             Minimum = 1,
             Maximum = 240,
             Value = 30,
-            Bounds = new Rectangle(18, 117, 100, 30)
+            Bounds = new Rectangle(18, 117, 100, 30),
+            BackColor = Surface,
+            ForeColor = Foreground
         };
         dialog.Controls.Add(minutes);
         dialog.Controls.Add(new Label
@@ -702,12 +729,16 @@ internal sealed class MainForm : Form
         {
             Text = "Set timer",
             Bounds = new Rectangle(254, 165, 109, 36),
+            BackColor = Surface,
+            ForeColor = Foreground,
             DialogResult = DialogResult.OK
         };
         dialog.Controls.Add(set);
         var cancelTimer = new Button
         {
             Text = "Cancel timer",
+            BackColor = Surface,
+            ForeColor = Foreground,
             Enabled = _sleepDeadline is not null,
             Bounds = new Rectangle(18, 165, 125, 36),
             DialogResult = DialogResult.Retry
@@ -728,6 +759,101 @@ internal sealed class MainForm : Form
         }
 
         _surface.Focus();
+    }
+
+    private void SetLightTheme(bool enabled)
+    {
+        _settings.LightTheme = enabled;
+        ThemePalette.Light = enabled;
+        BackColor = Background;
+        ForeColor = Foreground;
+        _surface.BackColor = Background;
+        _surface.ForeColor = Foreground;
+        _surface.Invalidate();
+
+        if (_trayMenu is not null)
+        {
+            _trayMenu.BackColor = Surface;
+            _trayMenu.ForeColor = Foreground;
+        }
+
+        try
+        {
+            _settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("Could not save theme preference.", ex);
+            SetStatus($"Could not save theme: {ex.Message}");
+        }
+    }
+
+    private void ConfigureMacros()
+    {
+        using var dialog = new MacroEditorDialog(_settings.ActiveProfile.Macros ?? []);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        _settings.ActiveProfile.Macros = dialog.Result;
+        try
+        {
+            _settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("Could not save macros.", ex);
+            SetStatus($"Could not save macros: {ex.Message}");
+        }
+
+        _surface.Focus();
+    }
+
+    private async Task RunMacroAsync(RemoteMacro macro)
+    {
+        if (_macroCancellation is not null)
+        {
+            SetStatus("Another macro is already running");
+            return;
+        }
+
+        if (!_remote.IsConnected)
+        {
+            SetStatus("Connect to the TV before running a macro");
+            return;
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        _macroCancellation = cancellation;
+        try
+        {
+            foreach (RemoteMacroStep step in macro.Steps.Take(12))
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                if (!_remote.IsConnected)
+                    throw new IOException("The TV disconnected during the macro.");
+                if (!MacroEditorDialog.IsAllowedKey(step.Key))
+                    throw new InvalidOperationException("The macro contains an unsupported command.");
+
+                await _remote.SendKeyAsync(step.Key);
+                await Task.Delay(Math.Clamp(step.DelayMs, 0, 1500), cancellation.Token);
+            }
+
+            SetStatus($"Macro '{macro.Name}' commands sent · TV response not confirmed");
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            SetStatus("Macro canceled");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Macro failed.", ex);
+            SetStatus($"Macro failed: {ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_macroCancellation, cancellation))
+                _macroCancellation = null;
+        }
     }
 
     private void SetAlwaysOnTop(bool enabled)
@@ -798,7 +924,7 @@ internal sealed class MainForm : Form
             "When connected, Power sends Samsung's power toggle key. This may turn the TV off or on, depending on its current state. " +
             "When disconnected, Power broadcasts a Wake-on-LAN packet using the configured wired or wireless MAC address. " +
             "Enable Power On with Mobile in the TV's Network Expert Settings if available. Wi-Fi wake support varies by model. " +
-            "Apps opens Samsung Home; actual commands available vary by firmware.\n\n" +
+            "Apps opens Samsung Home and custom shortcuts; actual commands available vary by firmware.\n\n" +
             "Connection message:\n" + _settings.TvIp + "\n\n" +
             "The TV and PC must be on the same local network.",
             "About this remote", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -833,6 +959,8 @@ internal sealed class MainForm : Form
             BeginInvoke(new Action(() => SetStatus(message)));
             return;
         }
+        if (!_remote.IsConnected)
+            _macroCancellation?.Cancel();
         _surface.SetConnection(message, _remote.IsConnected);
     }
 
@@ -883,10 +1011,18 @@ internal sealed class MainForm : Form
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
             Bounds = new Rectangle(14, 14, 482, 235),
-            Text = details
+            Text = details,
+            BackColor = Surface,
+            ForeColor = Foreground
         };
         dialog.Controls.Add(output);
-        var copy = new Button { Text = "Copy diagnostics", Bounds = new Rectangle(14, 261, 160, 38) };
+        var copy = new Button
+        {
+            Text = "Copy diagnostics",
+            Bounds = new Rectangle(14, 261, 160, 38),
+            BackColor = Surface,
+            ForeColor = Foreground
+        };
         copy.Click += (_, _) =>
         {
             try
@@ -903,6 +1039,8 @@ internal sealed class MainForm : Form
         {
             Text = "Close",
             Bounds = new Rectangle(396, 261, 100, 38),
+            BackColor = Surface,
+            ForeColor = Foreground,
             DialogResult = DialogResult.OK
         };
         dialog.Controls.Add(close);
