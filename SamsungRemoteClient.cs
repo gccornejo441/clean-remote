@@ -18,7 +18,7 @@ internal sealed class SamsungRemoteClient : IDisposable
 
     public bool IsConnected => _socket?.State == WebSocketState.Open;
 
-    public async Task<string?> ConnectAsync(string tvIp, bool secure, string? savedToken)
+    public async Task<string?> ConnectAsync(string tvIp, bool secure, string? savedToken, CancellationToken cancellationToken = default)
     {
         Disconnect();
 
@@ -47,7 +47,8 @@ internal sealed class SamsungRemoteClient : IDisposable
             url += $"&token={Uri.EscapeDataString(savedToken)}";
         }
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(50));
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(50));
 
         try
         {
@@ -83,6 +84,11 @@ internal sealed class SamsungRemoteClient : IDisposable
             }
 
             throw new IOException("The TV closed the pairing connection.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            socket.Dispose();
+            throw;
         }
         catch (OperationCanceledException)
         {
