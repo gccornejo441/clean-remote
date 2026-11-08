@@ -11,7 +11,8 @@ The main window uses a dark, narrow layout inspired by the provided remote scree
 - Power, Input, Apps, Netflix, and Type-to-TV text entry
 - Large circular four-way navigation pad with OK in the center
 - Back, Home, and Options shortcuts
-- Volume up/down arrow buttons and channel rocker, with mute and info controls
+- Volume up/down arrow buttons, optional mouse-wheel volume control, and channel rocker, with mute and info controls
+- Minimize-to-tray support and an always-on-top option
 - Rewind, Play, and Fast-forward controls
 - Hover and press feedback, responsive layout, and Windows keyboard navigation
 
@@ -71,7 +72,13 @@ The app sends UTF-8 text using Samsung's `SendInputString` WebSocket command. Th
 
 Some commands may be unsupported by specific Tizen versions or apps. The central Play button sends `KEY_PLAY` rather than an automatically tracked play/pause toggle.
 
-Click the volume up/down arrows to send `KEY_VOLUP` or `KEY_VOLDOWN` one step at a time. The TV does not report its current volume to the app.
+Click the volume up/down arrows to send `KEY_VOLUP` or `KEY_VOLDOWN` one step at a time. With the remote focused, hover over the volume control and scroll the mouse wheel to adjust volume (up to three steps per wheel event). The TV does not report its current volume to the app.
+
+### Windows tray and window options
+
+Minimizing the remote hides it in the Windows system tray instead of leaving an icon on the taskbar. Left-click the tray icon to restore the window. Right-click the tray icon for **Open Clean TV Remote** and **Exit**. Clicking the window's close button still exits the application.
+
+Select **Options > Always on top** to keep the remote over other windows. This setting is saved in your existing local settings file and is off by default.
 
 ### Windows keyboard shortcuts
 
@@ -85,6 +92,7 @@ Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape o
 - **Text does not appear:** Focus a native Samsung text field with the TV keyboard visible, then use **Type**. Many third-party streaming search keyboards, including Netflix and YouTube, do not accept this command.
 - **Netflix doesn't open:** Ensure Netflix is installed, the TV is on, and local app launching is supported by its firmware. The request may succeed without the TV opening the app.
 - **Unexpected disconnect:** Use **Options > Reconnect**.
+- **Minimized window isn't visible:** Find Clean TV Remote in the Windows notification area and left-click its icon. Right-click for Exit.
 - **Power button doesn't turn off the TV:** With the TV on, verify the app is connected and Home or Volume works. The button now sends `KEY_POWER`, which is more widely supported than `KEY_POWEROFF`, but model support still varies.
 - **Wake fails:** Check that the configured MAC matches the TV's active Wi-Fi/Ethernet adapter, enable Power On with Mobile (if available), and try Ethernet. A Wake-on-LAN packet being sent does not mean the TV received or accepted it.
 
