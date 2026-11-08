@@ -51,6 +51,12 @@ When the remote is connected, Power sends `KEY_POWER` instead of `KEY_POWEROFF`.
 
 The app sends UTF-8 text using Samsung's `SendInputString` WebSocket command. The command being sent does **not** confirm that the TV accepted the text. Netflix, YouTube, and some other streaming apps use their own keyboard screens and may ignore remote text input. The feature does not inject physical keyboard keys into those apps, and it does not automatically press OK. The remote does not retain or log the text you enter.
 
+## Connection and diagnostics
+
+The app automatically retries transient TV disconnections with increasing intervals (up to 30 seconds); choosing **Disconnect** disables retries until **Reconnect** or connecting to a profile. See **Options > Connection diagnostics** for connection state, timing, next retry, last error, and a Copy diagnostics action. Pairing tokens are excluded.
+
+Hold VOL or CH arrows to repeat commands after a short delay, or click once to send a single step. The repeat sender permits only one in-flight command to avoid excessive network traffic.
+
 ## Controls
 
 | UI | Samsung command |
@@ -91,7 +97,7 @@ Focus the remote window, then use arrow keys to navigate; Enter for OK; Escape o
 - **Connected but no response:** Try Home or Volume Up. Some Samsung key codes aren't accepted by all firmware versions.
 - **Text does not appear:** Focus a native Samsung text field with the TV keyboard visible, then use **Type**. Many third-party streaming search keyboards, including Netflix and YouTube, do not accept this command.
 - **Netflix doesn't open:** Ensure Netflix is installed, the TV is on, and local app launching is supported by its firmware. The request may succeed without the TV opening the app.
-- **Unexpected disconnect:** Use **Options > Reconnect**.
+- **Unexpected disconnect:** The remote retries lost connections with a 2–30 second backoff. You can select **Options > Reconnect** to retry immediately. Choosing **Disconnect** stops automatic retries until manually reconnected.
 - **Minimized window isn't visible:** Find Clean TV Remote in the Windows notification area and left-click its icon. Right-click for Exit.
 - **Power button doesn't turn off the TV:** With the TV on, verify the app is connected and Home or Volume works. The button now sends `KEY_POWER`, which is more widely supported than `KEY_POWEROFF`, but model support still varies.
 - **Wake fails:** Check that the configured MAC matches the TV's active Wi-Fi/Ethernet adapter, enable Power On with Mobile (if available), and try Ethernet. A Wake-on-LAN packet being sent does not mean the TV received or accepted it.

@@ -51,8 +51,14 @@ internal sealed class RemoteSurface : Control
     private string _tvName = "Living Room TV";
     private bool _connected;
     private int _volumeWheelDelta;
+    private readonly System.Windows.Forms.Timer _holdTimer = new() { Interval = 70 };
+    private string? _holdAction;
+    private long _holdStartedAt;
+    private long _nextHoldSendAt;
+    private bool _holdRepeated;
 
     public event Action<string>? ActionRequested;
+    public event Action<string>? RepeatActionRequested;
 
     public RemoteSurface()
     {
@@ -61,12 +67,44 @@ internal sealed class RemoteSurface : Control
         TabStop = true;
         BackColor = Background;
         ForeColor = TextPrimary;
+        _holdTimer.Tick += (_, _) =>
+        {
+            if (!_connected || _holdAction is null || _holdRepeated && Environment.TickCount64 < _nextHoldSendAt)
+                return;
+
+            long now = Environment.TickCount64;
+            if (now - _holdStartedAt < 450 || now < _nextHoldSendAt)
+                return;
+
+            _holdRepeated = true;
+            _nextHoldSendAt = now + 160;
+            RepeatActionRequested?.Invoke(_holdAction);
+        };
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _holdTimer.Dispose();
+
+        base.Dispose(disposing);
+    }
+
+    private static bool IsRepeatingAction(string? action) =>
+        action is "vol_up" or "vol_down" or "ch_up" or "ch_down";
+
+    private void CancelHold()
+    {
+        _holdTimer.Stop();
+        _holdAction = null;
     }
 
     public void SetConnection(string message, bool connected)
     {
         _status = message;
         _connected = connected;
+        if (!connected)
+            CancelHold();
         Invalidate();
     }
 
@@ -95,6 +133,11 @@ internal sealed class RemoteSurface : Control
     {
         base.OnMouseMove(e);
         string? next = HitTest(e.Location);
+        if (_holdAction is not null && next != _holdAction)
+        {
+            CancelHold();
+            _pressed = null;
+        }
         if (_hover != next)
         {
             _hover = next;
@@ -130,6 +173,7 @@ internal sealed class RemoteSurface : Control
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
+        CancelHold();
         _volumeWheelDelta = 0;
         _hover = null;
         _pressed = null;
@@ -143,6 +187,14 @@ internal sealed class RemoteSurface : Control
         if (e.Button != MouseButtons.Left) return;
         Focus();
         _pressed = HitTest(e.Location);
+        _holdRepeated = false;
+        if (_connected && IsRepeatingAction(_pressed))
+        {
+            _holdAction = _pressed;
+            _holdStartedAt = Environment.TickCount64;
+            _nextHoldSendAt = _holdStartedAt + 450;
+            _holdTimer.Start();
+        }
         Invalidate();
     }
 
@@ -151,12 +203,20 @@ internal sealed class RemoteSurface : Control
         base.OnMouseUp(e);
         string? hit = HitTest(e.Location);
         string? press = _pressed;
+        bool alreadyRepeated = _holdRepeated;
+        CancelHold();
         _pressed = null;
         Invalidate();
-        if (e.Button == MouseButtons.Left && press != null && press == hit)
+        if (e.Button == MouseButtons.Left && !alreadyRepeated && press != null && press == hit)
         {
             ActionRequested?.Invoke(press);
         }
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        CancelHold();
+        base.OnLostFocus(e);
     }
 
     protected override bool IsInputKey(Keys keyData)

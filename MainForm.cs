@@ -16,6 +16,16 @@ internal sealed class MainForm : Form
     private ContextMenuStrip? _trayMenu;
     private bool _connecting;
     private bool _powerRequestInProgress;
+    private bool _manualDisconnected;
+    private bool _repeatCommandInFlight;
+    private bool _closing;
+    private readonly System.Windows.Forms.Timer _reconnectTimer = new() { Interval = 2000 };
+    private CancellationTokenSource? _connectCancellation;
+    private DateTimeOffset _nextReconnectAt = DateTimeOffset.MinValue;
+    private DateTimeOffset? _lastConnectAt;
+    private TimeSpan? _lastConnectDuration;
+    private string _lastConnectionError = "None";
+    private int _reconnectDelaySeconds = 2;
     private DateTimeOffset _lastPowerRequest = DateTimeOffset.MinValue;
 
     public MainForm()
@@ -58,7 +68,17 @@ internal sealed class MainForm : Form
             ? $"Tap {_settings.ActiveProfile.Name} to set up your TV"
             : $"Ready to connect · Tap {_settings.ActiveProfile.Name}", false);
         _surface.ActionRequested += async action => await HandleActionAsync(action);
+        _surface.RepeatActionRequested += async action => await HandleRepeatAsync(action);
         Controls.Add(_surface);
+        _reconnectTimer.Tick += async (_, _) =>
+        {
+            if (_closing || _manualDisconnected || _connecting || _remote.IsConnected ||
+                string.IsNullOrWhiteSpace(_settings.TvIp) || DateTimeOffset.UtcNow < _nextReconnectAt)
+                return;
+
+            await RunAsync(ConnectAsync);
+        };
+        _reconnectTimer.Start();
 
         _remote.StatusChanged += SetStatus;
         _remote.PairingTokenChanged += UpdateToken;
@@ -96,6 +116,10 @@ internal sealed class MainForm : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        _closing = true;
+        _reconnectTimer.Stop();
+        _reconnectTimer.Dispose();
+        _connectCancellation?.Cancel();
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;
@@ -194,6 +218,47 @@ internal sealed class MainForm : Form
 
     private Task SendAsync(string key) => RunAsync(() => _remote.SendKeyAsync(key));
 
+    private async Task HandleRepeatAsync(string action)
+    {
+        if (_repeatCommandInFlight || !_remote.IsConnected || _closing)
+            return;
+
+        string? key = action switch
+        {
+            "vol_up" => "KEY_VOLUP",
+            "vol_down" => "KEY_VOLDOWN",
+            "ch_up" => "KEY_CHUP",
+            "ch_down" => "KEY_CHDOWN",
+            _ => null
+        };
+        if (key is null)
+            return;
+
+        _repeatCommandInFlight = true;
+        try
+        {
+            await SendAsync(key);
+        }
+        finally
+        {
+            _repeatCommandInFlight = false;
+        }
+    }
+
+    private void DisconnectManually()
+    {
+        _manualDisconnected = true;
+        _connectCancellation?.Cancel();
+        _remote.Disconnect();
+    }
+
+    private async Task ManualReconnectAsync()
+    {
+        _manualDisconnected = false;
+        _nextReconnectAt = DateTimeOffset.MinValue;
+        await RunAsync(ConnectAsync);
+    }
+
     private async Task ShowSettingsAsync()
     {
         using var dialog = new ConnectionDialog(_settings, _remote.IsConnected);
@@ -203,7 +268,7 @@ internal sealed class MainForm : Form
 
         if (result == DialogResult.Abort)
         {
-            _remote.Disconnect();
+            DisconnectManually();
             SetStatus($"Disconnected · Tap {_settings.ActiveProfile.Name} to connect");
             return;
         }
@@ -216,6 +281,9 @@ internal sealed class MainForm : Form
 
         if (result != DialogResult.OK) return;
 
+        _manualDisconnected = true;
+        _connectCancellation?.Cancel();
+        _remote.Disconnect();
         _settings.ActiveProfileId = dialog.SelectedProfile.Id;
         _surface.SetTvName(dialog.SelectedProfile.Name);
         string ip = dialog.TvIp;
@@ -235,7 +303,7 @@ internal sealed class MainForm : Form
             SetStatus($"Could not save TV settings: {ex.Message}");
             return;
         }
-        await RunAsync(ConnectAsync);
+        await ManualReconnectAsync();
     }
 
     private async Task ConnectAsync()
@@ -247,14 +315,40 @@ internal sealed class MainForm : Form
             return;
         }
         _connecting = true;
+        _lastConnectAt = DateTimeOffset.UtcNow;
+        var elapsed = Stopwatch.StartNew();
+        using var cancellation = new CancellationTokenSource();
+        _connectCancellation = cancellation;
         try
         {
-            string? newToken = await _remote.ConnectAsync(_settings.TvIp, _settings.Secure, _settings.Token);
-            if (!string.IsNullOrWhiteSpace(newToken)) UpdateToken(newToken);
+            string? newToken = await _remote.ConnectAsync(_settings.TvIp, _settings.Secure, _settings.Token, cancellation.Token);
+            if (cancellation.IsCancellationRequested || _manualDisconnected || _closing)
+                return;
+
+            if (!string.IsNullOrWhiteSpace(newToken))
+                UpdateToken(newToken);
+
+            _reconnectDelaySeconds = 2;
+            _lastConnectionError = "None";
+            _nextReconnectAt = DateTimeOffset.MinValue;
             SetStatus($"Connected · {_settings.ActiveProfile.Name}");
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _lastConnectionError = ex.Message;
+            _nextReconnectAt = DateTimeOffset.UtcNow.AddSeconds(_reconnectDelaySeconds);
+            _reconnectDelaySeconds = Math.Min(30, _reconnectDelaySeconds * 2);
+            throw;
         }
         finally
         {
+            elapsed.Stop();
+            _lastConnectDuration = elapsed.Elapsed;
+            if (ReferenceEquals(_connectCancellation, cancellation))
+                _connectCancellation = null;
             _connecting = false;
         }
     }
@@ -279,7 +373,7 @@ internal sealed class MainForm : Form
     {
         if (MessageBox.Show(this, "Forget this TV's saved pairing token? You will need to approve the connection again on the TV.",
             "Forget pairing", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        _remote.Disconnect();
+        DisconnectManually();
         _settings.Token = "";
         try
         {
@@ -303,9 +397,10 @@ internal sealed class MainForm : Form
             Font = new Font("Segoe UI", 10)
         };
         menu.Items.Add("Connection settings", null, async (_, _) => await ShowSettingsAsync());
-        menu.Items.Add("Reconnect", null, async (_, _) => await RunAsync(ConnectAsync));
+        menu.Items.Add("Reconnect", null, async (_, _) => await ManualReconnectAsync());
         menu.Items.Add("Wake TV", null, async (_, _) => await WakeAsync());
         menu.Items.Add("Open diagnostic log", null, (_, _) => OpenDiagnosticLog());
+        menu.Items.Add("Connection diagnostics", null, (_, _) => ShowConnectionDiagnostics());
         menu.Items.Add("Keyboard shortcuts", null, (_, _) => ShowKeyboardHelp());
         var alwaysOnTop = new ToolStripMenuItem("Always on top")
         {
@@ -319,7 +414,7 @@ internal sealed class MainForm : Form
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Disconnect", null, (_, _) =>
         {
-            _remote.Disconnect();
+            DisconnectManually();
             SetStatus($"Disconnected · Tap {_settings.ActiveProfile.Name} to reconnect");
         });
         menu.Items.Add("Forget pairing", null, (_, _) => ClearPairing());
@@ -438,6 +533,68 @@ internal sealed class MainForm : Form
             AppLog.Error("An operation failed.", ex);
             SetStatus($"Error: {ex.Message}");
         }
+    }
+
+    private void ShowConnectionDiagnostics()
+    {
+        string status = _remote.IsConnected ? "Connected" :
+            _manualDisconnected ? "Disconnected by user" :
+            _connecting ? "Connecting" : "Offline (automatic retry enabled)";
+
+        string details =
+            $"TV: {_settings.ActiveProfile.Name}{Environment.NewLine}" +
+            $"IP: {_settings.TvIp}{Environment.NewLine}" +
+            $"Port: {(_settings.Secure ? 8002 : 8001)}{Environment.NewLine}" +
+            $"Status: {status}{Environment.NewLine}" +
+            $"Last connection attempt: {_lastConnectAt?.ToLocalTime().ToString("G") ?? "Never"}{Environment.NewLine}" +
+            $"Last connection duration: {_lastConnectDuration?.TotalSeconds.ToString("F1") ?? "N/A"} seconds{Environment.NewLine}" +
+            $"Next automatic retry: {(_manualDisconnected || _remote.IsConnected ? "Not scheduled" : _nextReconnectAt.ToLocalTime().ToString("G"))}{Environment.NewLine}" +
+            $"Last error: {_lastConnectionError}{Environment.NewLine}" +
+            $"Diagnostic log: {AppLog.LogFilePath}";
+        
+        using var dialog = new Form
+        {
+            Text = "Connection diagnostics",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            ClientSize = new Size(510, 315),
+            BackColor = Background,
+            ForeColor = Foreground,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var output = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Bounds = new Rectangle(14, 14, 482, 235),
+            Text = details
+        };
+        dialog.Controls.Add(output);
+        var copy = new Button { Text = "Copy diagnostics", Bounds = new Rectangle(14, 261, 160, 38) };
+        copy.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(details);
+            }
+            catch (System.Runtime.InteropServices.ExternalException ex)
+            {
+                AppLog.Error("Clipboard copy failed.", ex);
+            }
+        };
+        dialog.Controls.Add(copy);
+        var close = new Button
+        {
+            Text = "Close",
+            Bounds = new Rectangle(396, 261, 100, 38),
+            DialogResult = DialogResult.OK
+        };
+        dialog.Controls.Add(close);
+        dialog.AcceptButton = close;
+        dialog.ShowDialog(this);
+        _surface.Focus();
     }
 
     private void OpenDiagnosticLog()
