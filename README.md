@@ -29,6 +29,9 @@ The build script publishes a self-contained single-file Windows x64 executable. 
 
 ## Connect to the Samsung TV
 
+**Find TVs:** In connection settings, select **Find TVs** to make a short, user-initiated local-network discovery request. The discovery tool listens for nearby SSDP responders and verifies candidate Samsung devices through their local API before offering their IP addresses. It does not scan external networks. If nothing is found, manually enter the TV IP address as before.
+
+
 1. Turn on your TV and connect it and the PC to the same home network.
 2. If available, enable **IP Remote** in the TV's network expert settings.
 3. Find the TV's IPv4 address in its network settings or your router's connected-device list.
@@ -93,6 +96,10 @@ Click the volume up/down arrows to send `KEY_VOLUP` or `KEY_VOLDOWN` one step at
 Minimizing the remote hides it in the Windows system tray instead of leaving an icon on the taskbar. Left-click the tray icon to restore the window. Right-click the tray icon for **Open Clean TV Remote** and **Exit**. Clicking the window's close button still exits the application.
 
 Select **Options > Always on top** to keep the remote over other windows. This setting is saved in your existing local settings file and is off by default.
+
+### Optional global keyboard shortcuts
+
+Enable **Options > Global hotkeys** to control the TV while another application has focus. This setting is off by default and is saved between launches. Shortcuts use **Ctrl+Alt+Shift+F9** for Volume Up, **F10** for Volume Down, **F11** for Mute, and **F12** for Play. They are unregistered on exit. If Windows reports a shortcut conflict, hotkeys are not enabled.
 
 ### Windows keyboard shortcuts
 

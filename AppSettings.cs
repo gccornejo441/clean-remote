@@ -11,6 +11,7 @@ internal sealed class AppSettings
     public List<TvProfile> Profiles { get; set; } = [];
     public string ActiveProfileId { get; set; } = "";
     public bool AlwaysOnTop { get; set; }
+    public bool GlobalHotkeysEnabled { get; set; }
 
     [JsonIgnore]
     public TvProfile ActiveProfile

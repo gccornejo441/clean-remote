@@ -1,10 +1,20 @@
 using System.Drawing;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace CleanTVRemote;
 
 internal sealed class MainForm : Form
 {
+    private const int HotkeyMessage = 0x0312;
+    private const uint HotkeyModifiers = 0x0001 | 0x0002 | 0x0004 | 0x4000;
+    private bool _hotkeysRegistered;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnregisterHotKey(IntPtr window, int id);
     private static readonly Color Background = Color.FromArgb(19, 18, 24);
     private static readonly Color Surface = Color.FromArgb(44, 42, 55);
     private static readonly Color Foreground = Color.FromArgb(242, 240, 249);
@@ -108,9 +118,86 @@ internal sealed class MainForm : Form
         Shown += async (_, _) =>
         {
             _surface.Focus();
+            if (_settings.GlobalHotkeysEnabled && !TryRegisterGlobalHotkeys())
+                SetStatus("Global hotkeys unavailable · Another app may use these shortcuts");
             if (!string.IsNullOrWhiteSpace(_settings.TvIp))
                 await RunAsync(ConnectAsync);
         };
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == HotkeyMessage && _hotkeysRegistered)
+        {
+            string? action = m.WParam.ToInt32() switch
+            {
+                6101 => "vol_up",
+                6102 => "vol_down",
+                6103 => "mute",
+                6104 => "play",
+                _ => null
+            };
+            if (action is not null)
+                _ = HandleActionAsync(action);
+
+            return;
+        }
+
+        base.WndProc(ref m);
+    }
+
+    private bool TryRegisterGlobalHotkeys()
+    {
+        if (_hotkeysRegistered)
+            return true;
+
+        Keys[] keys = [Keys.F9, Keys.F10, Keys.F11, Keys.F12];
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (!RegisterHotKey(Handle, 6101 + i, HotkeyModifiers, (uint)keys[i]))
+            {
+                for (int j = 0; j < i; j++)
+                    UnregisterHotKey(Handle, 6101 + j);
+                return false;
+            }
+        }
+
+        _hotkeysRegistered = true;
+        return true;
+    }
+
+    private void UnregisterGlobalHotkeys()
+    {
+        if (!_hotkeysRegistered)
+            return;
+
+        for (int i = 0; i < 4; i++)
+            UnregisterHotKey(Handle, 6101 + i);
+
+        _hotkeysRegistered = false;
+    }
+
+    private void SetGlobalHotkeys(bool enable)
+    {
+        if (enable && !TryRegisterGlobalHotkeys())
+        {
+            SetStatus("Unable to enable hotkeys · One or more shortcuts are in use");
+            return;
+        }
+
+        if (!enable)
+            UnregisterGlobalHotkeys();
+
+        _settings.GlobalHotkeysEnabled = enable;
+        try
+        {
+            _settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("Could not save global hotkey preference.", ex);
+            SetStatus($"Could not save hotkey preference: {ex.Message}");
+        }
     }
 
     protected override void OnResize(EventArgs e)
@@ -140,6 +227,7 @@ internal sealed class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _closing = true;
+        UnregisterGlobalHotkeys();
         _reconnectTimer.Stop();
         _reconnectTimer.Dispose();
         _sleepDeadline = null;
@@ -441,6 +529,12 @@ internal sealed class MainForm : Form
                 SetStatus("Sleep timer canceled");
             });
         menu.Items.Add("Keyboard shortcuts", null, (_, _) => ShowKeyboardHelp());
+        var hotkeys = new ToolStripMenuItem("Global hotkeys (Ctrl+Alt+Shift+F9–F12)")
+        {
+            Checked = _hotkeysRegistered
+        };
+        hotkeys.Click += (_, _) => SetGlobalHotkeys(!_hotkeysRegistered);
+        menu.Items.Add(hotkeys);
         var alwaysOnTop = new ToolStripMenuItem("Always on top")
         {
             Checked = TopMost,
@@ -684,6 +778,11 @@ internal sealed class MainForm : Form
             "M             Mute\n" +
             "PgUp / PgDn   Channel up / down\n" +
             "Space         Play\n\n" +
+            "Optional global shortcuts (enable in Options):\n" +
+            "Ctrl+Alt+Shift+F9    Volume up\n" +
+            "Ctrl+Alt+Shift+F10  Volume down\n" +
+            "Ctrl+Alt+Shift+F11  Mute\n" +
+            "Ctrl+Alt+Shift+F12  Play\n\n" +
             "Click the VOL up/down arrows to change the TV volume. The TV does not report its current volume level.\n\n" +
             "To type text, click Type on the remote while a supported TV text field is focused. Some streaming apps do not support this.",
             "Keyboard control", MessageBoxButtons.OK, MessageBoxIcon.Information);

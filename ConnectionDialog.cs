@@ -62,7 +62,9 @@ internal sealed class ConnectionDialog : Form
         var addProfile = CreateButton("Add profile", 270, 110, 84, 31, Surface, DialogResult.None);
         addProfile.Click += (_, _) => AddProfile();
 
-        AddText("TV IP ADDRESS", 24, 153, 330, 19, 9, Muted, true);
+        AddText("TV IP ADDRESS", 24, 153, 215, 19, 9, Muted, true);
+        var discover = CreateButton("Find TVs", 256, 148, 98, 27, Surface, DialogResult.None);
+        discover.Click += async (_, _) => await DiscoverTvsAsync(discover);
         StyleField(_ip, 24, 177, 330);
         _ip.PlaceholderText = "192.168.1.50";
 
@@ -99,6 +101,66 @@ internal sealed class ConnectionDialog : Form
         disconnect.Enabled = connected;
         var cancel = CreateButton("Cancel", 258, 403, 96, 28, Surface, DialogResult.Cancel);
         CancelButton = cancel;
+    }
+
+    private async Task DiscoverTvsAsync(Button button)
+    {
+        button.Enabled = false;
+        try
+        {
+            IReadOnlyList<DiscoveredSamsungTv> devices = await SamsungTvDiscovery.FindAsync();
+            if (IsDisposed)
+                return;
+
+            if (devices.Count == 0)
+            {
+                MessageBox.Show(this, "No verified Samsung TVs found on this local network. Enter the IP address manually.",
+                    "TV discovery", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var picker = new Form
+            {
+                Text = "Discovered Samsung TVs",
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                ClientSize = new Size(420, 275),
+                BackColor = Background,
+                ForeColor = Foreground,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+            var list = new ListBox
+            {
+                Bounds = new Rectangle(15, 15, 390, 180),
+                DisplayMember = nameof(DiscoveredSamsungTv.Display)
+            };
+            foreach (DiscoveredSamsungTv device in devices)
+                list.Items.Add(device);
+            list.SelectedIndex = 0;
+            picker.Controls.Add(list);
+            var select = new Button
+            {
+                Text = "Use IP",
+                Bounds = new Rectangle(292, 217, 113, 35),
+                DialogResult = DialogResult.OK
+            };
+            picker.Controls.Add(select);
+            picker.AcceptButton = select;
+            if (picker.ShowDialog(this) == DialogResult.OK &&
+                list.SelectedItem is DiscoveredSamsungTv selected)
+                _ip.Text = selected.Ip;
+        }
+        catch (Exception ex) when (ex is IOException or SocketException or HttpRequestException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"Discovery could not complete: {ex.Message}", "TV discovery",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if (!IsDisposed)
+                button.Enabled = true;
+        }
     }
 
     private void AddProfile()
